@@ -1,0 +1,249 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#F5F2ED">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="JuvenFIT Coach">
+<title>JuvenFIT Coach</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;600;700;800&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+:root{
+  --bg:#F5F2ED;--sf:#EDE9E3;--cd:#FFFFFF;--bd:#E0DBD3;
+  --tx:#1a1a1a;--mt:#8A8478;--ac:#5A1A1A;--dn:#dc2626;
+  --gn:#16a34a;--yw:#ca8a04;
+  --fm:'JetBrains Mono',monospace;--fs:'DM Sans',system-ui,sans-serif;
+}
+*{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent;}
+button{font-family:inherit;cursor:pointer;border:none;background:none;color:inherit;}
+input,textarea,select{font-family:inherit;}
+body{font-family:var(--fs);background:var(--bg);color:var(--tx);min-height:100dvh;font-size:15px;line-height:1.5;}
+
+/* Layout: mobile-first single column → desktop centered max-width */
+.app{max-width:480px;margin:0 auto;min-height:100dvh;padding:0 16px 100px;padding-top:env(safe-area-inset-top);padding-bottom:calc(100px + env(safe-area-inset-bottom));}
+@media(min-width:768px){.app{max-width:900px;padding:24px 32px 100px;}}
+
+/* Header */
+.header{padding:20px 0 16px;display:flex;align-items:center;justify-content:space-between;}
+.header h1{font-size:22px;font-weight:800;color:var(--ac);letter-spacing:-0.5px;}
+.header-sub{font-size:12px;color:var(--mt);font-weight:600;text-transform:uppercase;letter-spacing:0.5px;}
+
+/* Page system (igual que atleta) */
+.page{display:none;}
+.page.active{display:block;}
+
+/* Cards */
+.card{background:var(--cd);border:1px solid var(--bd);border-radius:14px;padding:16px;margin-bottom:12px;transition:border-color .15s;}
+.card-link{cursor:pointer;}
+.card-link:hover{border-color:var(--ac);}
+.card-accent{border-color:var(--ac);background:linear-gradient(135deg,#FFF 0%,#FAF6F0 100%);}
+
+/* Sections */
+.sec{margin-top:24px;}
+.sec-title{font-size:12px;font-weight:700;color:var(--mt);text-transform:uppercase;letter-spacing:0.8px;margin-bottom:12px;}
+
+/* Buttons */
+.btn{display:block;width:100%;background:var(--ac);color:#fff;font-size:15px;font-weight:700;padding:14px 18px;border-radius:12px;text-align:center;}
+.btn:disabled{opacity:0.5;cursor:not-allowed;}
+.btn-out{display:block;width:100%;background:transparent;color:var(--tx);font-size:14px;font-weight:600;padding:12px 18px;border-radius:12px;border:1px solid var(--bd);text-align:center;}
+.btn-danger{display:block;width:100%;background:transparent;color:var(--dn);font-size:14px;font-weight:600;padding:12px 18px;border-radius:12px;border:1px solid rgba(220,38,38,0.3);text-align:center;}
+.btn-sm{padding:8px 14px;font-size:13px;border-radius:10px;}
+
+/* Inputs */
+.input{width:100%;background:var(--cd);border:1px solid var(--bd);border-radius:12px;padding:14px 16px;font-size:15px;color:var(--tx);outline:none;}
+.input:focus{border-color:var(--ac);}
+.label{display:block;font-size:11px;font-weight:700;color:var(--mt);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:6px;}
+
+/* Utilities */
+.row{display:flex;align-items:center;justify-content:space-between;}
+.flex{display:flex;}
+.flex-1{flex:1;}
+.gap-8{gap:8px;}.gap-12{gap:12px;}
+.mt-8{margin-top:8px;}.mt-12{margin-top:12px;}.mt-16{margin-top:16px;}.mt-20{margin-top:20px;}
+.mb-8{margin-bottom:8px;}.mb-12{margin-bottom:12px;}.mb-16{margin-bottom:16px;}
+.text-sm{font-size:13px;}.text-xs{font-size:12px;}
+.text-mt{color:var(--mt);}.text-ac{color:var(--ac);}.text-dn{color:var(--dn);}.text-gn{color:var(--gn);}
+.fw-700{font-weight:700;}.fw-800{font-weight:800;}
+.mono{font-family:var(--fm);}
+
+/* Login screen specific */
+.login-wrap{display:flex;flex-direction:column;justify-content:center;min-height:80dvh;max-width:380px;margin:0 auto;}
+.login-logo{font-size:32px;font-weight:800;color:var(--ac);text-align:center;letter-spacing:-1px;margin-bottom:8px;}
+.login-tagline{text-align:center;color:var(--mt);font-size:14px;margin-bottom:32px;}
+
+/* Toast/feedback */
+.toast{position:fixed;bottom:20px;left:50%;transform:translateX(-50%);background:var(--tx);color:#fff;padding:12px 20px;border-radius:10px;font-size:14px;font-weight:600;z-index:200;opacity:0;pointer-events:none;transition:opacity .2s;}
+.toast.show{opacity:1;}
+.toast.error{background:var(--dn);}
+.toast.success{background:var(--gn);}
+
+/* Spinner */
+.spinner{display:inline-block;width:16px;height:16px;border:2px solid currentColor;border-right-color:transparent;border-radius:50%;animation:spin .6s linear infinite;}
+@keyframes spin{to{transform:rotate(360deg);}}
+</style>
+</head>
+<body>
+
+<div class="app">
+
+  <!-- ══ LOGIN ══ -->
+  <div id="pg-login" class="page active">
+    <div class="login-wrap">
+      <div class="login-logo">JuvenFIT</div>
+      <div class="login-tagline">Panel de profes</div>
+
+      <div class="card">
+        <div class="mb-12">
+          <label class="label">Email</label>
+          <input id="login-email" class="input" type="email" autocomplete="email" placeholder="tu@email.com">
+        </div>
+        <div class="mb-16">
+          <label class="label">Contraseña</label>
+          <input id="login-pass" class="input" type="password" autocomplete="current-password" placeholder="••••••••">
+        </div>
+        <button id="login-btn" class="btn" onclick="doLogin()">Entrar</button>
+        <div id="login-error" class="text-xs text-dn mt-12" style="text-align:center;min-height:18px"></div>
+      </div>
+
+      <div class="text-xs text-mt mt-16" style="text-align:center">
+        ¿Olvidaste tu contraseña? Pedile a un admin que te resetee.
+      </div>
+    </div>
+  </div>
+
+  <!-- ══ MAIN APP (post-login) ══ -->
+  <div id="pg-main" class="page">
+    <div class="header">
+      <div>
+        <h1>JuvenFIT Coach</h1>
+        <div class="header-sub" id="user-info"></div>
+      </div>
+      <button class="btn-sm btn-out" style="width:auto" onclick="doLogout()">Salir</button>
+    </div>
+
+    <div class="sec">
+      <div class="sec-title">Biblioteca de ejercicios</div>
+      <div id="ex-count" class="text-sm text-mt mb-12"></div>
+      <div id="ex-list"></div>
+    </div>
+  </div>
+
+</div>
+
+<div id="toast" class="toast"></div>
+
+<script>
+// ══ CONFIG ══
+const SUPABASE_URL='https://erwatvliyfcusfghonzg.supabase.co';
+const SUPABASE_ANON='sb_publishable_8HKIn2Pw_afJvdq-FTKO4Q_samO09Fj';
+const sb=window.supabase.createClient(SUPABASE_URL,SUPABASE_ANON);
+
+// ══ STATE ══
+let session=null;
+let coachProfile=null;
+
+// ══ HELPERS ══
+function $(id){return document.getElementById(id);}
+function showPage(id){
+  document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));
+  $(id).classList.add('active');
+}
+function toast(msg,kind=''){
+  const el=$("toast");
+  el.className='toast show'+(kind?' '+kind:'');
+  el.textContent=msg;
+  setTimeout(()=>el.classList.remove('show'),2500);
+}
+
+// ══ AUTH ══
+async function doLogin(){
+  const email=$("login-email").value.trim();
+  const pass=$("login-pass").value;
+  const errEl=$("login-error");
+  const btn=$("login-btn");
+  errEl.textContent='';
+  if(!email||!pass){errEl.textContent='Completá email y contraseña';return;}
+  btn.disabled=true;btn.innerHTML='<span class="spinner"></span>';
+  const {data,error}=await sb.auth.signInWithPassword({email,password:pass});
+  btn.disabled=false;btn.textContent='Entrar';
+  if(error){errEl.textContent=error.message||'Error al iniciar sesión';return;}
+  session=data.session;
+  await loadCoachProfile();
+  enterApp();
+}
+
+async function doLogout(){
+  await sb.auth.signOut();
+  session=null;coachProfile=null;
+  $("login-email").value='';
+  $("login-pass").value='';
+  showPage('pg-login');
+}
+
+async function loadCoachProfile(){
+  if(!session) return null;
+  const {data,error}=await sb.from('coaches').select('*').eq('id',session.user.id).single();
+  if(error){console.warn('coach profile error:',error.message);return null;}
+  coachProfile=data;
+  return data;
+}
+
+async function checkAuthOnLoad(){
+  const {data}=await sb.auth.getSession();
+  if(data.session){
+    session=data.session;
+    await loadCoachProfile();
+    enterApp();
+  } else {
+    showPage('pg-login');
+  }
+}
+
+function enterApp(){
+  showPage('pg-main');
+  const role=coachProfile?.role||'coach';
+  const name=coachProfile?.name||session.user.email.split('@')[0];
+  $("user-info").textContent=`${name} · ${role==='admin'?'Admin':'Coach'}`;
+  loadExercises();
+}
+
+// ══ EXERCISES ══
+async function loadExercises(){
+  const list=$("ex-list");
+  list.innerHTML='<div class="text-sm text-mt">Cargando...</div>';
+  const {data,error}=await sb.from('exercises')
+    .select('id,name,category,muscle_activation,scope')
+    .order('scope',{ascending:true})
+    .order('name',{ascending:true});
+  if(error){list.innerHTML=`<div class="text-sm text-dn">Error: ${error.message}</div>`;return;}
+  $("ex-count").textContent=`${data.length} ejercicios en la biblioteca`;
+  list.innerHTML=data.map(ex=>{
+    const muscles=Object.keys(ex.muscle_activation||{}).slice(0,3).join(' · ');
+    const scopeBadge=ex.scope==='official'?'<span class="text-xs text-ac fw-700">OFICIAL</span>':'<span class="text-xs text-mt">CUSTOM</span>';
+    return `<div class="card"><div class="row"><div style="flex:1;min-width:0">
+      <div class="fw-700">${ex.name}</div>
+      <div class="text-xs text-mt mt-8">${muscles||'—'}</div>
+    </div><div style="flex-shrink:0;text-align:right">
+      ${scopeBadge}
+      <div class="text-xs text-mt mt-8">${ex.category||''}</div>
+    </div></div></div>`;
+  }).join('');
+}
+
+// ══ INIT ══
+checkAuthOnLoad();
+
+// Reaccionar a cambios de auth (logout en otra tab, etc.)
+sb.auth.onAuthStateChange((event,newSession)=>{
+  if(event==='SIGNED_OUT'||!newSession){
+    session=null;coachProfile=null;
+    if(!$("pg-login").classList.contains('active')) showPage('pg-login');
+  }
+});
+</script>
+</body>
+</html>
