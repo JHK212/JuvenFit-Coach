@@ -252,15 +252,9 @@ body.modal-open{overflow:hidden;touch-action:none;}
       <input id="athed-email" class="input" type="email" placeholder="alumno@email.com">
     </div>
 
-    <div class="flex gap-12 mb-16">
-      <div style="flex:1">
-        <label class="label">Fecha de nacimiento</label>
-        <input id="athed-birthdate" class="input" type="date">
-      </div>
-      <div style="flex:0 0 auto;align-self:flex-end;padding-bottom:14px">
-        <span class="text-xs text-mt">Edad:</span>
-        <span id="athed-age" class="fw-800 mono ml-4">—</span>
-      </div>
+    <div class="mb-16">
+      <label class="label">Edad</label>
+      <input id="athed-age" class="input input-num" type="number" min="0" max="120" inputmode="numeric" placeholder="Ej: 28">
     </div>
 
     <div class="mb-16">
@@ -791,16 +785,6 @@ function duplicateExercise(){
 }
 
 // ══ ATHLETES — LIST ══
-function calcAge(birthdate){
-  if(!birthdate) return null;
-  const b=new Date(birthdate+'T00:00:00');
-  if(isNaN(b)) return null;
-  const now=new Date();
-  let age=now.getFullYear()-b.getFullYear();
-  const m=now.getMonth()-b.getMonth();
-  if(m<0||(m===0&&now.getDate()<b.getDate())) age--;
-  return age>=0?age:null;
-}
 async function loadAthletes(){
   if(!coachProfile)return;
   const {data,error}=await sb.from('athletes').select('*').eq('coach_id',coachProfile.id).order('name',{ascending:true});
@@ -822,8 +806,7 @@ function renderAthleteList(){
     return;
   }
   list.innerHTML=filtered.map(a=>{
-    const age=calcAge(a.birthdate);
-    const meta=[a.email,a.level&&(a.level.charAt(0).toUpperCase()+a.level.slice(1)),age?age+' años':null].filter(Boolean).join(' · ');
+    const meta=[a.email,a.level&&(a.level.charAt(0).toUpperCase()+a.level.slice(1)),a.age?a.age+' años':null].filter(Boolean).join(' · ');
     return `<div class="ex-card" onclick="openAthleteEditor('${a.id}')"><div class="ex-info"><div class="ex-name">${a.name}</div><div class="ex-meta">${meta||'—'}</div></div><div class="text-mt" style="font-size:18px;flex-shrink:0">→</div></div>`;
   }).join('');
 }
@@ -837,7 +820,7 @@ function openAthleteEditor(id){
       id:editingAthlete.id,
       name:editingAthlete.name||'',
       email:editingAthlete.email||'',
-      birthdate:editingAthlete.birthdate||'',
+      age:editingAthlete.age||null,
       level:editingAthlete.level||'',
       primary_goal:editingAthlete.primary_goal||'',
       injuries:editingAthlete.injuries||'',
@@ -847,7 +830,7 @@ function openAthleteEditor(id){
     $("athed-title").textContent='Editar alumno';
   } else {
     editingAthlete=null;
-    editingAthleteState={id:null,name:'',email:'',birthdate:'',level:'',primary_goal:'',injuries:'',notes:'',starting_loads:{}};
+    editingAthleteState={id:null,name:'',email:'',age:null,level:'',primary_goal:'',injuries:'',notes:'',starting_loads:{}};
     $("athed-title").textContent='Nuevo alumno';
   }
   renderAthleteEditor();
@@ -858,19 +841,17 @@ function renderAthleteEditor(){
   const s=editingAthleteState;
   $("athed-name").value=s.name;
   $("athed-email").value=s.email;
-  $("athed-birthdate").value=s.birthdate;
+  $("athed-age").value=s.age||'';
   $("athed-goal").value=s.primary_goal;
   $("athed-injuries").value=s.injuries;
   $("athed-notes").value=s.notes;
-  const age=calcAge(s.birthdate);
-  $("athed-age").textContent=age?age+' años':'—';
   document.querySelectorAll('[data-lvl]').forEach(b=>b.classList.toggle('active',b.dataset.lvl===s.level));
   renderStartingLoads();
   $("athed-actions").style.display=editingAthlete?'block':'none';
   // Listeners (re-bind por si la página se mostró antes)
   $("athed-name").oninput=e=>{s.name=e.target.value;updateAthSaveBtn();};
   $("athed-email").oninput=e=>{s.email=e.target.value;};
-  $("athed-birthdate").oninput=e=>{s.birthdate=e.target.value;const a=calcAge(s.birthdate);$("athed-age").textContent=a?a+' años':'—';};
+  $("athed-age").oninput=e=>{const n=parseInt(e.target.value);s.age=isNaN(n)?null:Math.max(0,Math.min(120,n));};
   $("athed-goal").oninput=e=>{s.primary_goal=e.target.value;};
   $("athed-injuries").oninput=e=>{s.injuries=e.target.value;};
   $("athed-notes").oninput=e=>{s.notes=e.target.value;};
@@ -888,7 +869,7 @@ async function saveAthlete(){
   const payload={
     name:s.name.trim(),
     email:s.email.trim()||null,
-    birthdate:s.birthdate||null,
+    age:s.age||null,
     level:s.level||null,
     primary_goal:s.primary_goal.trim()||null,
     injuries:s.injuries.trim()||null,
