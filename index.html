@@ -63,10 +63,13 @@ body{font-family:var(--fs);background:var(--bg);color:var(--tx);min-height:100dv
 .btn-save:disabled{background:var(--bd);color:var(--mt);}
 
 /* Inputs */
-.input{width:100%;background:var(--cd);border:1px solid var(--bd);border-radius:12px;padding:14px 16px;font-size:16px;color:var(--tx);outline:none;}
+.input{width:100%;background:var(--cd);border:1px solid var(--bd);border-radius:12px;padding:14px 16px;font-size:16px;color:var(--tx);outline:none;box-sizing:border-box;}
 .input:focus{border-color:var(--ac);}
 .input:disabled{background:var(--sf);color:var(--mt);cursor:not-allowed;}
 .input-num{font-family:var(--fm);font-weight:700;text-align:center;}
+/* Normaliza alturas: type=date y type=number renderean diferente entre navegadores */
+input.input[type="date"],input.input[type="number"]{height:50px;line-height:1.2;-webkit-appearance:none;appearance:none;}
+input.input[type="date"]::-webkit-date-and-time-value{text-align:left;}
 .label{display:block;font-size:11px;font-weight:700;color:var(--mt);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:6px;}
 textarea.input{resize:vertical;min-height:70px;font-family:var(--fs);font-size:16px;}
 
@@ -206,6 +209,9 @@ body.modal-open{overflow:hidden;touch-action:none;}
 .xfl-inp{flex:1;background:var(--sf);border:1px solid var(--bd);border-radius:8px;padding:8px 10px;font-size:15px;color:var(--tx);outline:none;font-family:var(--fs);}
 .xfl-inp:focus{border-color:var(--ac);}
 textarea.xfl-inp{resize:none;min-height:48px;font-size:14px;}
+.qchip{display:inline-block;padding:3px 9px;background:var(--sf);border:1px solid var(--bd);border-radius:14px;font-size:12px;font-weight:600;color:var(--mt);cursor:pointer;font-family:var(--fm);}
+.qchip:hover{border-color:var(--ac);color:var(--ac);}
+.qchip-row{display:flex;flex-wrap:wrap;gap:5px;margin-top:5px;}
 </style>
 </head>
 <body>
@@ -249,6 +255,7 @@ textarea.xfl-inp{resize:none;min-height:48px;font-size:14px;}
       <span class="pill active" data-filter="all" onclick="setFilter('all')">Todos</span>
       <span class="pill" data-filter="compound" onclick="setFilter('compound')">Compuestos</span>
       <span class="pill" data-filter="aislacion" onclick="setFilter('aislacion')">Aislación</span>
+      <span class="pill" data-filter="movilidad" onclick="setFilter('movilidad')">Movilidad</span>
     </div>
 
     <div id="ex-count" class="text-xs text-mt mb-12"></div>
@@ -438,6 +445,14 @@ textarea.xfl-inp{resize:none;min-height:48px;font-size:14px;}
     <div id="dayed-blocks"></div>
 
     <button class="btn-out mt-8" onclick="openAddBlockPicker()">+ Agregar bloque</button>
+
+    <div class="sec" id="dayed-volume-sec" style="display:none">
+      <div class="row mb-10">
+        <div class="sec-title" style="margin-bottom:0">Balance del día</div>
+        <span class="text-xs text-mt" id="dayed-volume-meta"></span>
+      </div>
+      <div id="dayed-volume" class="card" style="padding:18px 16px"></div>
+    </div>
   </div>
 
   <!-- ══ SETTINGS (placeholder) ══ -->
@@ -474,6 +489,7 @@ textarea.xfl-inp{resize:none;min-height:48px;font-size:14px;}
       <div class="radio-group">
         <button class="radio-btn" data-cat="compound" onclick="setEditorCategory('compound')">Compuesto</button>
         <button class="radio-btn" data-cat="aislacion" onclick="setEditorCategory('aislacion')">Aislación</button>
+        <button class="radio-btn" data-cat="movilidad" onclick="setEditorCategory('movilidad')">Movilidad</button>
       </div>
     </div>
 
@@ -498,7 +514,7 @@ textarea.xfl-inp{resize:none;min-height:48px;font-size:14px;}
       <input id="ed-equipment" class="input" placeholder="Ej: barra, mancuernas, peso corporal">
     </div>
 
-    <div class="sec">
+    <div class="sec" id="ed-muscle-sec">
       <div class="sec-title">Activación muscular</div>
       <div id="muscle-list"></div>
       <button id="btn-add-muscle" class="btn-out mt-8" onclick="openMusclePicker()">+ Agregar músculo</button>
@@ -508,6 +524,7 @@ textarea.xfl-inp{resize:none;min-height:48px;font-size:14px;}
         <button class="btn-sm btn-out" onclick="autoComplete100()" style="flex:1">✓ Auto 100%</button>
       </div>
     </div>
+    <div id="ed-mov-hint" class="text-xs text-mt mt-12 center" style="display:none;font-style:italic">Las movilidades no contribuyen al volumen muscular. No requieren activación.</div>
 
     <div class="sec">
       <div class="sec-title">Similares</div>
@@ -581,6 +598,7 @@ let editingAthlete=null;
 let editingAthleteState=null;
 let allRoutines=[];           // rutinas del alumno actualmente abierto
 let currentAthleteId=null;    // alumno cuyo detalle estoy viendo
+let showAllArchived=false;    // expandir/colapsar histórico
 let editingRoutine=null;
 let editingRoutineState=null;
 
@@ -664,6 +682,7 @@ function renderList(){
   let items=allExercises.filter(ex=>{
     if(currentFilter==='compound'&&ex.category!=='compound')return false;
     if(currentFilter==='aislacion'&&ex.category!=='aislacion')return false;
+    if(currentFilter==='movilidad'&&ex.category!=='movilidad')return false;
     if(search){
       const hay=normalizeText(ex.name+' '+(ex.aliases||[]).join(' '));
       if(!hay.includes(search))return false;
@@ -714,6 +733,7 @@ function renderEditor(){
   $("cues-count").textContent=editorState.cues.length;
   // Categoría radio
   document.querySelectorAll('[data-cat]').forEach(b=>b.classList.toggle('active',b.dataset.cat===editorState.category));
+  applyMovilidadVisibility();
   // Aliases / Similar / Músculos
   renderAliases(true);
   renderSimilar(true);
@@ -726,7 +746,19 @@ function renderEditor(){
   $("ed-equipment").oninput=e=>{editorState.equipment=e.target.value;};
   $("ed-movement").onchange=e=>{editorState.movement=e.target.value;};
 }
-function setEditorCategory(c){editorState.category=c;document.querySelectorAll('[data-cat]').forEach(b=>b.classList.toggle('active',b.dataset.cat===c));}
+function setEditorCategory(c){
+  editorState.category=c;
+  document.querySelectorAll('[data-cat]').forEach(b=>b.classList.toggle('active',b.dataset.cat===c));
+  applyMovilidadVisibility();
+  // Re-evaluar el botón save (movilidad permite muscle vacío)
+  if(typeof renderMuscleEditor==='function') renderMuscleEditor(true);
+}
+function applyMovilidadVisibility(){
+  const isMov=editorState&&editorState.category==='movilidad';
+  const sec=$("ed-muscle-sec"),hint=$("ed-mov-hint");
+  if(sec) sec.style.display=isMov?'none':'';
+  if(hint) hint.style.display=isMov?'block':'none';
+}
 
 // ALIASES (chips)
 function renderAliases(editable){
@@ -795,8 +827,12 @@ function renderMuscleEditor(editable){
   if(total===100) tEl.classList.add('ok');
   else if(total<100) tEl.classList.add('warn');
   else tEl.classList.add('over');
-  // Validation visual del save
-  $("btn-save-ex").disabled=total!==100||!editorState.name.trim()||editorState.muscleActivation.length===0;
+  // Validation visual del save (movilidad: solo nombre)
+  if(editorState.category==='movilidad'){
+    $("btn-save-ex").disabled=!editorState.name.trim();
+  } else {
+    $("btn-save-ex").disabled=total!==100||!editorState.name.trim()||editorState.muscleActivation.length===0;
+  }
 }
 function muscleTotal(){return editorState.muscleActivation.reduce((s,m)=>s+(parseFloat(m.pct)||0),0);}
 function updateMuscleTotalUI(){
@@ -807,7 +843,11 @@ function updateMuscleTotalUI(){
   if(total===100) tEl.classList.add('ok');
   else if(total<100) tEl.classList.add('warn');
   else tEl.classList.add('over');
-  $("btn-save-ex").disabled=total!==100||!editorState.name.trim()||editorState.muscleActivation.length===0;
+  if(editorState.category==='movilidad'){
+    $("btn-save-ex").disabled=!editorState.name.trim();
+  } else {
+    $("btn-save-ex").disabled=total!==100||!editorState.name.trim()||editorState.muscleActivation.length===0;
+  }
 }
 // Update liviano: solo cambia el % de un músculo sin re-renderear toda la lista (slider fluido)
 function onMusclePctChange(i,v){
@@ -870,11 +910,14 @@ function addMuscle(m){
 async function saveExercise(){
   const total=muscleTotal();
   if(!editorState.name.trim())return toast('Falta el nombre','error');
-  if(total!==100)return toast('La activación muscular debe sumar exactamente 100%','error');
-  if(editorState.muscleActivation.length===0)return toast('Agregá al menos un músculo','error');
+  const isMov=editorState.category==='movilidad';
+  if(!isMov){
+    if(total!==100)return toast('La activación muscular debe sumar exactamente 100%','error');
+    if(editorState.muscleActivation.length===0)return toast('Agregá al menos un músculo','error');
+  }
 
   const muscle_activation={};
-  editorState.muscleActivation.forEach(m=>{muscle_activation[m.muscle]=m.pct;});
+  if(!isMov) editorState.muscleActivation.forEach(m=>{muscle_activation[m.muscle]=m.pct;});
 
   // Generar id si es nuevo
   let id=editorState.id;
@@ -1150,7 +1193,7 @@ async function openAthleteDetail(id){
   await loadAthleteRoutines(id);
 }
 
-function closeAthleteDetail(){currentAthleteId=null;allRoutines=[];navTo('pg-athletes');}
+function closeAthleteDetail(){currentAthleteId=null;allRoutines=[];showAllArchived=false;navTo('pg-athletes');}
 function editCurrentAthlete(){if(currentAthleteId) openAthleteEditor(currentAthleteId);}
 
 async function loadAthleteRoutines(athleteId){
@@ -1172,11 +1215,20 @@ function renderRoutinesInDetail(){
     $("adet-active").innerHTML='<div class="text-sm text-mt center" style="padding:20px 0">Sin rutina activa</div>';
   }
   if(archived.length){
-    $("adet-archived").innerHTML=archived.map(r=>routineCard(r,false)).join('');
+    const visible=showAllArchived?archived:archived.slice(0,3);
+    let html=visible.map(r=>routineCard(r,false)).join('');
+    if(archived.length>3){
+      html+=showAllArchived
+        ?`<button class="btn-out btn-sm mt-8" onclick="toggleShowAllArchived()">Ver menos</button>`
+        :`<button class="btn-out btn-sm mt-8" onclick="toggleShowAllArchived()">Ver ${archived.length-3} más</button>`;
+    }
+    $("adet-archived").innerHTML=html;
   } else {
     $("adet-archived").innerHTML='<div class="text-xs text-mt center" style="padding:8px 0">Sin rutinas archivadas</div>';
   }
 }
+
+function toggleShowAllArchived(){showAllArchived=!showAllArchived;renderRoutinesInDetail();}
 
 function routineCard(r,isActive){
   const dayCount=(r.days||[]).length;
@@ -1191,10 +1243,10 @@ function routineCard(r,isActive){
   if(r.coach_notes&&isActive) html+=`<div class="text-xs text-mt mt-8" style="font-style:italic">📝 ${r.coach_notes}</div>`;
   if(!isActive&&r.archived_at) html+=`<div class="text-xs text-mt mt-4">Archivada ${relativeTime(r.archived_at)}</div>`;
   if(isActive){
-    html+=`<div class="flex gap-8 mt-12">`;
-    html+=`<button class="btn-sm btn-out" style="flex:1" onclick="event.stopPropagation();openRoutineEditor('${r.id}')">✎ Editar</button>`;
-    html+=`<button class="btn-sm btn-out" style="flex:1" onclick="event.stopPropagation();showRoutineQR('${r.id}')">📱 QR</button>`;
-    html+=`<button class="btn-sm btn-out" style="flex:0 0 auto" onclick="event.stopPropagation();archiveRoutine('${r.id}')" title="Archivar">📦</button>`;
+    html+=`<div class="mt-12" style="display:grid;grid-template-columns:1fr 1fr 44px;gap:8px;min-width:0">`;
+    html+=`<button class="btn-sm btn-out" style="min-width:0;padding:8px 6px" onclick="event.stopPropagation();openRoutineEditor('${r.id}')">✎ Editar</button>`;
+    html+=`<button class="btn-sm btn-out" style="min-width:0;padding:8px 6px" onclick="event.stopPropagation();showRoutineQR('${r.id}')">📱 QR</button>`;
+    html+=`<button class="btn-sm btn-out" style="padding:8px 0" onclick="event.stopPropagation();archiveRoutine('${r.id}')" title="Archivar">📦</button>`;
     html+=`</div>`;
   }
   html+=`</div>`;
@@ -1387,7 +1439,8 @@ function saveDayEditor(){
   if(!editingDayState) return;
   const nameVal=$("dayed-name").value.trim();
   if(nameVal) editingDayState.name=nameVal;
-  if(editingDayIdx===-1){
+  const isNew=editingDayIdx===-1;
+  if(isNew){
     editingRoutineState.days.push(editingDayState);
   } else {
     editingRoutineState.days[editingDayIdx]=editingDayState;
@@ -1395,6 +1448,7 @@ function saveDayEditor(){
   renderRoutineDays();
   drawRoutineMuscleChart();
   closeDayEditor();
+  toast(isNew?'Día agregado':'Día actualizado','success');
 }
 
 function removeRoutineDay(dayIdx){
@@ -1455,6 +1509,7 @@ function renderDayEditor(){
   } else {
     c.innerHTML=blocks.map((b,bi)=>renderBlockHTML(b,bi)).join('');
   }
+  drawDayMuscleChart();
 }
 
 function renderBlockHTML(b,bi){
@@ -1463,9 +1518,10 @@ function renderBlockHTML(b,bi){
   const label=b.type==='custom'&&b.label?b.label:bt.label;
   const blocks=editingDayState.blocks;
   const exs=b.exercises||[];
+  const isCustom=b.type==='custom';
   let html=`<div class="block-wrap">
     <div class="block-hd">
-      <span class="block-tag" style="background:${color}">${label}</span>
+      <span class="block-tag" style="background:${color};${isCustom?'cursor:pointer':''}" ${isCustom?`onclick="renameBlockLabel(${bi})" title="Tap para renombrar"`:''}>${label}${isCustom?' ✎':''}</span>
       <span style="flex:1"></span>
       ${bi>0?`<span class="micro-btn" onclick="moveBlock(${bi},-1)">↑</span>`:''}
       ${bi<blocks.length-1?`<span class="micro-btn" onclick="moveBlock(${bi},1)">↓</span>`:''}
@@ -1512,13 +1568,23 @@ function renderBexRowHTML(ex,bi,ei){
         <span class="xfl-lbl">Series</span>
         <input type="number" class="xfl-inp" min="1" max="20" inputmode="numeric" value="${s(ex.sets)}" placeholder="4" oninput="upEx(${bi},${ei},'sets',this.value)" style="max-width:80px;flex:none">
       </div>
-      <div class="xfl">
-        <span class="xfl-lbl">Reps</span>
-        <input type="text" class="xfl-inp" value="${s(ex.reps)}" placeholder="8-10 / AMRAP / 30 segs" oninput="upEx(${bi},${ei},'reps',this.value)">
+      <div class="xfl" style="align-items:flex-start">
+        <span class="xfl-lbl" style="padding-top:6px">Reps</span>
+        <div style="flex:1">
+          <input id="reps-${bi}-${ei}" type="text" class="xfl-inp" value="${s(ex.reps)}" placeholder="8-10 / AMRAP / 30 segs" oninput="upEx(${bi},${ei},'reps',this.value)">
+          <div class="qchip-row">
+            ${['6-8','8-10','10-12','12-15','15-20','AMRAP','30 segs','45 segs','1 min'].map(v=>`<span class="qchip" onclick="setQuickField('reps-${bi}-${ei}',${bi},${ei},'reps','${v}')">${v}</span>`).join('')}
+          </div>
+        </div>
       </div>
-      <div class="xfl">
-        <span class="xfl-lbl">Descanso</span>
-        <input type="text" class="xfl-inp" value="${s(ex.rest)}" placeholder="90 segs / 2 min" oninput="upEx(${bi},${ei},'rest',this.value)">
+      <div class="xfl" style="align-items:flex-start">
+        <span class="xfl-lbl" style="padding-top:6px">Descanso</span>
+        <div style="flex:1">
+          <input id="rest-${bi}-${ei}" type="text" class="xfl-inp" value="${s(ex.rest)}" placeholder="90 segs / 2 min" oninput="upEx(${bi},${ei},'rest',this.value)">
+          <div class="qchip-row">
+            ${['30 segs','45 segs','60 segs','90 segs','2 min','3 min'].map(v=>`<span class="qchip" onclick="setQuickField('rest-${bi}-${ei}',${bi},${ei},'rest','${v}')">${v}</span>`).join('')}
+          </div>
+        </div>
       </div>
       <div class="xfl">
         <span class="xfl-lbl">Objetivo</span>
@@ -1539,6 +1605,7 @@ function toggleExExpand(bi,ei){
   renderDayEditor();
 }
 
+let _dayChartTimer=null;
 function upEx(bi,ei,field,val){
   const ex=editingDayState.blocks[bi].exercises[ei];
   ex[field]=field==='sets'?(parseInt(val)||null):val;
@@ -1546,6 +1613,17 @@ function upEx(bi,ei,field,val){
     const sp=$("bex-name-"+bi+"-"+ei);
     if(sp) sp.innerHTML=(val||'Ejercicio')+' <span class="badge badge-custom" style="margin-left:6px">custom</span>';
   }
+  // Debounced redraw del chart cuando cambian sets/reps
+  if(field==='sets'||field==='reps'){
+    if(_dayChartTimer) clearTimeout(_dayChartTimer);
+    _dayChartTimer=setTimeout(drawDayMuscleChart,250);
+  }
+}
+
+function setQuickField(inputId,bi,ei,field,val){
+  const inp=$(inputId);
+  if(inp) inp.value=val;
+  upEx(bi,ei,field,val);
 }
 
 function moveBlock(bi,dir){
@@ -1609,14 +1687,35 @@ function addBlock(type){
   renderDayEditor();
 }
 
+function renameBlockLabel(bi){
+  const b=editingDayState.blocks[bi];
+  if(!b||b.type!=='custom') return;
+  const v=prompt('Nombre del bloque:',b.label||'');
+  if(v===null) return;
+  b.label=v.trim();
+  renderDayEditor();
+}
+
 function openExPickerForBlock(bi){
+  const blockType=editingDayState&&editingDayState.blocks[bi]?editingDayState.blocks[bi].type:null;
+  // Si el bloque es de movilidad, ordenamos las movilidades primero
+  const sorted=[...allExercises].sort((a,b)=>{
+    if(blockType==='movilidad'){
+      const am=a.category==='movilidad'?0:1, bm=b.category==='movilidad'?0:1;
+      if(am!==bm) return am-bm;
+    } else if(blockType==='principal'){
+      const ac=a.category==='compound'?0:1, bc=b.category==='compound'?0:1;
+      if(ac!==bc) return ac-bc;
+    }
+    return a.name.localeCompare(b.name);
+  });
   let html=`<div class="fw-800 mb-12" style="font-size:18px">Agregar ejercicio</div>`;
   html+=`<input class="search-input" placeholder="🔍 Buscar en biblioteca..." oninput="filterPickerList(this.value,'.expick-item')" autofocus>`;
   html+=`<div class="picker-item" style="border-style:dashed;border-color:var(--ac);color:var(--ac)" onclick="addCustomExerciseToBlock(${bi})"><div class="fw-700 text-sm">+ Ejercicio personalizado</div><div class="text-xs text-mt">No entra a la biblioteca · útil para biseries / triseries</div></div>`;
   html+=`<div style="max-height:48dvh;overflow-y:auto;margin-top:12px">`;
-  if(allExercises.length){
-    allExercises.forEach(ex=>{
-      const muscles=Object.keys(ex.muscle_activation||{}).slice(0,2).map(m=>MUSCLE_LABELS[m]||m).join(' · ');
+  if(sorted.length){
+    sorted.forEach(ex=>{
+      const muscles=ex.category==='movilidad'?'movilidad':Object.keys(ex.muscle_activation||{}).slice(0,2).map(m=>MUSCLE_LABELS[m]||m).join(' · ');
       html+=`<div class="picker-item expick-item" data-name="${normalizeText(ex.name+' '+(ex.aliases||[]).join(' '))}" onclick="addExerciseToBlock(${bi},'${ex.id}')">
         <div><div class="fw-700 text-sm">${ex.name}</div><div class="text-xs text-mt">${muscles}</div></div>
       </div>`;
@@ -1676,14 +1775,13 @@ function subMuscleColors(zoneName,n){
   if(n===1) return [base];
   return Array.from({length:n},(_,i)=>shadeColor(base,((i/(n-1))-0.5)*0.7));
 }
-function routineMuscleVolume(){
+function muscleVolumeFromDays(days){
   const totals={};let uncovered=0;
-  const days=editingRoutineState&&editingRoutineState.days||[];
-  days.forEach(d=>{
+  (days||[]).forEach(d=>{
     (d.blocks||[]).forEach(b=>{
       (b.exercises||[]).forEach(ex=>{
         const lib=ex.exerciseId?allExercises.find(e=>e.id===ex.exerciseId):null;
-        if(!lib||!lib.muscle_activation){uncovered++;return;}
+        if(!lib||!lib.muscle_activation||!Object.keys(lib.muscle_activation).length){uncovered++;return;}
         const sets=parseInt(ex.sets)||0;
         const reps=parseRepsValue(ex.reps);
         const vol=sets*reps;
@@ -1696,11 +1794,10 @@ function routineMuscleVolume(){
   });
   return {totals,uncovered};
 }
-function exerciseContributionsToZone(zoneName){
+function contributionsFromDays(days,zoneName){
   const zoneMuscles=BODY_ZONES[zoneName].muscles;
   const contribs=[];
-  const days=editingRoutineState&&editingRoutineState.days||[];
-  days.forEach(d=>{
+  (days||[]).forEach(d=>{
     (d.blocks||[]).forEach(b=>{
       (b.exercises||[]).forEach(ex=>{
         const lib=ex.exerciseId?allExercises.find(e=>e.id===ex.exerciseId):null;
@@ -1717,8 +1814,14 @@ function exerciseContributionsToZone(zoneName){
   });
   return contribs.sort((a,b)=>b.reps-a.reps);
 }
-function showZoneDetail(zoneName){
-  const {totals}=routineMuscleVolume();
+function _scopedDays(scope){
+  if(scope==='day') return editingDayState?[editingDayState]:[];
+  return editingRoutineState&&editingRoutineState.days||[];
+}
+function routineMuscleVolume(){return muscleVolumeFromDays(_scopedDays('routine'));}
+function exerciseContributionsToZone(zoneName,scope='routine'){return contributionsFromDays(_scopedDays(scope),zoneName);}
+function showZoneDetail(zoneName,scope='routine'){
+  const {totals}=muscleVolumeFromDays(_scopedDays(scope));
   const zone=BODY_ZONES[zoneName];if(!zone) return;
   const subMuscles=zone.muscles.map(m=>({m,label:MUSCLE_LABELS[m]||m,v:totals[m]||0})).filter(x=>x.v>0).sort((a,b)=>b.v-a.v);
   const zoneTotal=subMuscles.reduce((s,x)=>s+x.v,0);
@@ -1736,7 +1839,7 @@ function showZoneDetail(zoneName){
       const d=`M ${cx} ${cy} L ${x1.toFixed(2)} ${y1.toFixed(2)} A ${r} ${r} 0 ${large} 1 ${x2.toFixed(2)} ${y2.toFixed(2)} Z`;
       paths+=`<path d="${d}" fill="${colors[i]}" stroke="var(--cd)" stroke-width="2"/>`;
     });
-    svg=`<svg width="140" height="140" viewBox="0 0 140 140" xmlns="http://www.w3.org/2000/svg" style="display:block;margin:0 auto">${paths}</svg>`;
+    svg=`<svg viewBox="0 0 140 140" xmlns="http://www.w3.org/2000/svg" style="display:block;margin:0 auto;width:140px;max-width:60%;height:auto">${paths}</svg>`;
   } else if(subMuscles.length===1){
     svg=`<div style="width:100px;height:100px;border-radius:50%;background:${colors[0]};margin:0 auto"></div>`;
   }
@@ -1752,7 +1855,7 @@ function showZoneDetail(zoneName){
     });
     html+=`</div>`;
   }
-  const contribs=exerciseContributionsToZone(zoneName);
+  const contribs=exerciseContributionsToZone(zoneName,scope);
   const byName={};
   contribs.forEach(c=>{
     if(!byName[c.name]) byName[c.name]={name:c.name,reps:0,days:new Set()};
@@ -1771,25 +1874,24 @@ function showZoneDetail(zoneName){
   html+=`<button class="btn-out mt-20" onclick="closeModal()">Cerrar</button>`;
   $("modal-content").innerHTML=html;$("modal").classList.add('show');
 }
-function drawRoutineMuscleChart(){
-  const sec=$("rted-volume-sec");if(!sec) return;
-  if(!editingRoutineState){sec.style.display='none';return;}
-  const {totals,uncovered}=routineMuscleVolume();
+function drawMuscleChartIn(opts){
+  // opts: {secId, contentId, metaId, scope, days, label}
+  const sec=$(opts.secId);if(!sec) return;
+  const days=opts.days||[];
+  const {totals,uncovered}=muscleVolumeFromDays(days);
   const zoneVols=Object.entries(BODY_ZONES).map(([name,def])=>({
     name,v:def.muscles.reduce((s,m)=>s+(totals[m]||0),0),color:def.color
   })).filter(z=>z.v>0).sort((a,b)=>b.v-a.v);
   const total=zoneVols.reduce((s,z)=>s+z.v,0);
-  const days=editingRoutineState.days||[];
   const exCount=days.reduce((s,d)=>s+(d.blocks||[]).reduce((a,b)=>a+(b.exercises?b.exercises.length:0),0),0);
-  // Mostrar solo si hay al menos un ejercicio agregado
   if(exCount===0){sec.style.display='none';return;}
   sec.style.display='block';
-  $("rted-volume-meta").textContent=`${exCount} ej. en ${days.length} día${days.length===1?'':'s'}`;
+  if(opts.metaId&&$(opts.metaId)) $(opts.metaId).textContent=opts.label||`${exCount} ej.`;
   if(total===0){
     const msg=uncovered>0
-      ?`Los ${uncovered} ejercicio${uncovered===1?'':'s'} no tienen series/reps cargadas todavía. Completá esos campos para ver el balance.`
+      ?`${uncovered} ejercicio${uncovered===1?'':'s'} sin series/reps o sin biblioteca. Completá esos campos para ver el balance.`
       :'Sin datos para calcular volumen. Completá series y reps en cada ejercicio.';
-    $("rted-volume").innerHTML=`<div class="text-sm text-mt center">${msg}</div>`;
+    $(opts.contentId).innerHTML=`<div class="text-sm text-mt center">${msg}</div>`;
     return;
   }
   const cx=110,cy=110,r=100;let cum=-Math.PI/2;let paths='';
@@ -1807,7 +1909,7 @@ function drawRoutineMuscleChart(){
     const d=slices.length===1
       ?`M ${cx} ${cy-r} A ${r} ${r} 0 1 1 ${cx} ${cy+r} A ${r} ${r} 0 1 1 ${cx} ${cy-r} Z`
       :`M ${cx} ${cy} L ${x1.toFixed(2)} ${y1.toFixed(2)} A ${r} ${r} 0 ${large} 1 ${x2.toFixed(2)} ${y2.toFixed(2)} Z`;
-    paths+=`<path d="${d}" fill="${s.color}" style="cursor:pointer" onclick="showZoneDetail('${s.zoneName}')"/>`;
+    paths+=`<path d="${d}" fill="${s.color}" style="cursor:pointer" onclick="showZoneDetail('${s.zoneName}','${opts.scope}')"/>`;
   });
   let separators='';
   if(slices.length>1){
@@ -1820,11 +1922,11 @@ function drawRoutineMuscleChart(){
       separators+=`<line x1="${cx}" y1="${cy}" x2="${x.toFixed(2)}" y2="${y.toFixed(2)}" stroke="${stroke}" stroke-width="${sw}" stroke-linecap="round" pointer-events="none"/>`;
     });
   }
-  const svg=`<svg width="220" height="220" viewBox="0 0 220 220" xmlns="http://www.w3.org/2000/svg" style="display:block;margin:0 auto">${paths}${separators}</svg>`;
+  const svg=`<svg viewBox="0 0 220 220" xmlns="http://www.w3.org/2000/svg" style="display:block;margin:0 auto;width:100%;max-width:240px;height:auto">${paths}${separators}</svg>`;
   let legend=`<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px 14px;margin-top:18px">`;
   zoneVols.forEach(z=>{
     const pct=(z.v/total*100).toFixed(0);
-    legend+=`<div onclick="showZoneDetail('${z.name}')" style="display:flex;align-items:center;gap:8px;font-size:14px;cursor:pointer;padding:4px;border-radius:6px"><div style="width:12px;height:12px;border-radius:3px;background:${z.color};flex-shrink:0"></div><span class="text-mt" style="flex:1">${z.name}</span><span class="mono fw-700">${pct}%</span></div>`;
+    legend+=`<div onclick="showZoneDetail('${z.name}','${opts.scope}')" style="display:flex;align-items:center;gap:8px;font-size:14px;cursor:pointer;padding:4px;border-radius:6px"><div style="width:12px;height:12px;border-radius:3px;background:${z.color};flex-shrink:0"></div><span class="text-mt" style="flex:1">${z.name}</span><span class="mono fw-700">${pct}%</span></div>`;
   });
   legend+=`</div>`;
   legend+=`<div class="text-xs text-mt mt-8" style="text-align:center;font-style:italic">Tap en un grupo para ver el desglose</div>`;
@@ -1847,8 +1949,22 @@ function drawRoutineMuscleChart(){
     groupBar+=`</div>`;
   }
   let warn='';
-  if(uncovered>0) warn=`<div class="text-xs text-mt center mt-8" style="font-style:italic">⚠ ${uncovered} ejercicio${uncovered===1?'':'s'} sin asignar a la biblioteca (no contribuyen al balance)</div>`;
-  $("rted-volume").innerHTML=svg+legend+groupBar+warn;
+  if(uncovered>0) warn=`<div class="text-xs text-mt center mt-8" style="font-style:italic">⚠ ${uncovered} ejercicio${uncovered===1?'':'s'} sin biblioteca o sin activación (no contribuyen al balance)</div>`;
+  $(opts.contentId).innerHTML=svg+legend+groupBar+warn;
+}
+
+function drawRoutineMuscleChart(){
+  if(!editingRoutineState){const s=$("rted-volume-sec");if(s)s.style.display='none';return;}
+  const days=editingRoutineState.days||[];
+  const exCount=days.reduce((s,d)=>s+(d.blocks||[]).reduce((a,b)=>a+(b.exercises?b.exercises.length:0),0),0);
+  drawMuscleChartIn({secId:'rted-volume-sec',contentId:'rted-volume',metaId:'rted-volume-meta',scope:'routine',days,label:`${exCount} ej. en ${days.length} día${days.length===1?'':'s'}`});
+}
+
+function drawDayMuscleChart(){
+  if(!editingDayState){const s=$("dayed-volume-sec");if(s)s.style.display='none';return;}
+  const days=[editingDayState];
+  const exCount=(editingDayState.blocks||[]).reduce((a,b)=>a+(b.exercises?b.exercises.length:0),0);
+  drawMuscleChartIn({secId:'dayed-volume-sec',contentId:'dayed-volume',metaId:'dayed-volume-meta',scope:'day',days,label:`${exCount} ej. este día`});
 }
 
 // Cuando se guarda un alumno desde el editor, si veníamos del detalle, volvemos al detalle
