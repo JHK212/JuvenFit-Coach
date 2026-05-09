@@ -359,7 +359,7 @@ textarea.xfl-inp{resize:none;min-height:48px;font-size:14px;}
       <button id="btn-save-rt" class="btn-save" onclick="saveRoutine()">Guardar</button>
     </div>
 
-    <div id="rted-display-id" class="text-xs text-mt center mb-12 mono"></div>
+    <div id="rted-display-id" class="text-xs text-mt center mb-12 mono" style="display:none"></div>
 
     <div class="mb-16">
       <label class="label">Nombre *</label>
@@ -409,6 +409,14 @@ textarea.xfl-inp{resize:none;min-height:48px;font-size:14px;}
       <button class="btn-out mt-8" onclick="openDayEditor(-1)">+ Agregar día</button>
     </div>
 
+    <div class="sec" id="rted-volume-sec" style="display:none">
+      <div class="row mb-10">
+        <div class="sec-title" style="margin-bottom:0">Balance muscular</div>
+        <span class="text-xs text-mt" id="rted-volume-meta"></span>
+      </div>
+      <div id="rted-volume" class="card" style="padding:18px 16px"></div>
+    </div>
+
     <div class="sec" id="rted-actions" style="display:none">
       <button class="btn-danger" onclick="deleteRoutine()">🗑 Eliminar rutina</button>
     </div>
@@ -419,12 +427,12 @@ textarea.xfl-inp{resize:none;min-height:48px;font-size:14px;}
     <div class="editor-header">
       <button class="btn-back" onclick="closeDayEditor()">←</button>
       <div class="editor-title" id="dayed-title">Día</div>
-      <button class="btn-save" onclick="saveDayEditor()">OK</button>
+      <button class="btn-save" onclick="saveDayEditor()">Listo</button>
     </div>
 
     <div class="mb-16">
       <label class="label">Nombre del día</label>
-      <input id="dayed-name" class="input" placeholder="Ej: Día A — Empuje">
+      <input id="dayed-name" class="input" placeholder="Ej: Día 1 — Empuje">
     </div>
 
     <div id="dayed-blocks"></div>
@@ -1210,7 +1218,9 @@ function openRoutineEditor(routineId){
       days:editingRoutine.days||[]
     };
     $("rted-title").textContent='Editar rutina';
-    $("rted-display-id").textContent=editingRoutine.display_id||'';
+    const did=editingRoutine.display_id||'';
+    $("rted-display-id").textContent=did;
+    $("rted-display-id").style.display=did?'block':'none';
   } else {
     if(!currentAthleteId){toast('Sin alumno seleccionado','error');return;}
     editingRoutine=null;
@@ -1226,7 +1236,8 @@ function openRoutineEditor(routineId){
       days:[]
     };
     $("rted-title").textContent='Nueva rutina';
-    $("rted-display-id").textContent='Se generará al guardar (JF-AAAA-MM-NNN)';
+    $("rted-display-id").textContent='';
+    $("rted-display-id").style.display='none';
   }
   renderRoutineEditor();
   showPage('pg-edit-routine');
@@ -1242,6 +1253,7 @@ function renderRoutineEditor(){
   document.querySelectorAll('[data-phase]').forEach(b=>b.classList.toggle('active',b.dataset.phase===s.phase));
   $("rted-actions").style.display=editingRoutine?'block':'none';
   renderRoutineDays();
+  drawRoutineMuscleChart();
   $("rted-name").oninput=e=>{s.name=e.target.value;updateRtSaveBtn();};
   $("rted-startdate").oninput=e=>{s.start_date=e.target.value;};
   $("rted-freq").oninput=e=>{const n=parseInt(e.target.value);s.frequency_per_week=isNaN(n)?null:Math.max(1,Math.min(7,n));};
@@ -1348,9 +1360,8 @@ let expandedEx=null; // {bi, ei}
 function openDayEditor(dayIdx){
   editingDayIdx=dayIdx;
   if(dayIdx===-1){
-    const names=['A','B','C','D','E','F','G'];
     const n=editingRoutineState.days.length;
-    editingDayState={id:uid(),name:'Día '+(names[n]||String(n+1)),blocks:[]};
+    editingDayState={id:uid(),name:'Día '+(n+1),blocks:[]};
   } else {
     editingDayState=JSON.parse(JSON.stringify(editingRoutineState.days[dayIdx]));
     // Migrate old flat-exercises format to blocks
@@ -1382,6 +1393,7 @@ function saveDayEditor(){
     editingRoutineState.days[editingDayIdx]=editingDayState;
   }
   renderRoutineDays();
+  drawRoutineMuscleChart();
   closeDayEditor();
 }
 
@@ -1390,6 +1402,7 @@ function removeRoutineDay(dayIdx){
   if(!confirm(`¿Eliminar "${d.name||'este día'}"?`)) return;
   editingRoutineState.days.splice(dayIdx,1);
   renderRoutineDays();
+  drawRoutineMuscleChart();
 }
 
 function moveRoutineDay(dayIdx,dir){
@@ -1469,8 +1482,9 @@ function renderBlockHTML(b,bi){
 }
 
 function renderBexRowHTML(ex,bi,ei){
-  const libEx=allExercises.find(e=>e.id===ex.exerciseId);
-  const name=libEx?libEx.name:(ex.exerciseId||'Ejercicio');
+  const libEx=ex.exerciseId?allExercises.find(e=>e.id===ex.exerciseId):null;
+  const isCustom=!ex.exerciseId&&!!ex.customName;
+  const name=libEx?libEx.name:(ex.customName||ex.exerciseId||'Ejercicio');
   const isExp=expandedEx&&expandedEx.bi===bi&&expandedEx.ei===ei;
   const metaParts=[];
   if(ex.sets&&ex.reps) metaParts.push(`${ex.sets}×${ex.reps}`);
@@ -1482,7 +1496,7 @@ function renderBexRowHTML(ex,bi,ei){
   const s=v=>(v!=null&&v!==undefined)?String(v):'';
   let html=`<div class="bex-row">
     <div class="bex-top">
-      <span class="bex-name" onclick="toggleExExpand(${bi},${ei})">${name}</span>
+      <span class="bex-name" id="bex-name-${bi}-${ei}" onclick="toggleExExpand(${bi},${ei})">${name}${isCustom?' <span class="badge badge-custom" style="margin-left:6px">custom</span>':''}</span>
       ${ei>0?`<span class="micro-btn" onclick="moveExercise(${bi},${ei},-1)">↑</span>`:''}
       ${ei<exs.length-1?`<span class="micro-btn" onclick="moveExercise(${bi},${ei},1)">↓</span>`:''}
       <span class="micro-btn" style="color:var(--dn)" onclick="removeExercise(${bi},${ei})">✕</span>
@@ -1490,6 +1504,10 @@ function renderBexRowHTML(ex,bi,ei){
     ${meta?`<div class="bex-meta">${meta}</div>`:''}`;
   if(isExp){
     html+=`<div class="bex-expand">
+      ${isCustom?`<div class="xfl">
+        <span class="xfl-lbl">Nombre</span>
+        <input type="text" class="xfl-inp" value="${s(ex.customName)}" placeholder="Ej: Curl con polea baja" oninput="upEx(${bi},${ei},'customName',this.value)">
+      </div>`:''}
       <div class="xfl">
         <span class="xfl-lbl">Series</span>
         <input type="number" class="xfl-inp" min="1" max="20" inputmode="numeric" value="${s(ex.sets)}" placeholder="4" oninput="upEx(${bi},${ei},'sets',this.value)" style="max-width:80px;flex:none">
@@ -1524,6 +1542,10 @@ function toggleExExpand(bi,ei){
 function upEx(bi,ei,field,val){
   const ex=editingDayState.blocks[bi].exercises[ei];
   ex[field]=field==='sets'?(parseInt(val)||null):val;
+  if(field==='customName'){
+    const sp=$("bex-name-"+bi+"-"+ei);
+    if(sp) sp.innerHTML=(val||'Ejercicio')+' <span class="badge badge-custom" style="margin-left:6px">custom</span>';
+  }
 }
 
 function moveBlock(bi,dir){
@@ -1589,8 +1611,9 @@ function addBlock(type){
 
 function openExPickerForBlock(bi){
   let html=`<div class="fw-800 mb-12" style="font-size:18px">Agregar ejercicio</div>`;
-  html+=`<input class="search-input" placeholder="🔍 Buscar..." oninput="filterPickerList(this.value,'.expick-item')" autofocus>`;
-  html+=`<div style="max-height:52dvh;overflow-y:auto">`;
+  html+=`<input class="search-input" placeholder="🔍 Buscar en biblioteca..." oninput="filterPickerList(this.value,'.expick-item')" autofocus>`;
+  html+=`<div class="picker-item" style="border-style:dashed;border-color:var(--ac);color:var(--ac)" onclick="addCustomExerciseToBlock(${bi})"><div class="fw-700 text-sm">+ Ejercicio personalizado</div><div class="text-xs text-mt">No entra a la biblioteca · útil para biseries / triseries</div></div>`;
+  html+=`<div style="max-height:48dvh;overflow-y:auto;margin-top:12px">`;
   if(allExercises.length){
     allExercises.forEach(ex=>{
       const muscles=Object.keys(ex.muscle_activation||{}).slice(0,2).map(m=>MUSCLE_LABELS[m]||m).join(' · ');
@@ -1612,6 +1635,220 @@ function addExerciseToBlock(bi,exId){
   closeModal();
   expandedEx={bi,ei};
   renderDayEditor();
+}
+
+function addCustomExerciseToBlock(bi){
+  const name=prompt('Nombre del ejercicio personalizado:','');
+  if(name===null) return;
+  const trimmed=name.trim();
+  if(!trimmed){toast('Nombre vacío','error');return;}
+  if(!editingDayState.blocks[bi].exercises) editingDayState.blocks[bi].exercises=[];
+  const ei=editingDayState.blocks[bi].exercises.length;
+  editingDayState.blocks[bi].exercises.push({id:uid(),exerciseId:null,customName:trimmed,sets:null,reps:'',rest:'',objective:'',notes:''});
+  closeModal();
+  expandedEx={bi,ei};
+  renderDayEditor();
+}
+
+// ══ MUSCLE VOLUME PIE CHART (en editor de rutina) ══
+const MUSCLE_GROUPS={
+  Push:['pecho_sup','pecho_med','pecho_inf','triceps','delt_ant','delt_lat'],
+  Pull:['dorsal','trapecio','biceps','delt_post','antebrazo'],
+  Pierna:['cuadriceps','isquios','gluteo','gemelos','aductor'],
+  Core:['lumbar','core']
+};
+function parseRepsValue(s){
+  if(s==null) return 0;
+  const str=s.toString().toLowerCase();
+  const num=parseFloat(str);
+  if(isNaN(num)) return 0;
+  if(/min/.test(str)) return num*20;
+  if(/seg|\bs\b/.test(str)) return num/3;
+  return num;
+}
+function shadeColor(hex,factor){
+  const r=parseInt(hex.slice(1,3),16),g=parseInt(hex.slice(3,5),16),b=parseInt(hex.slice(5,7),16);
+  const adj=c=>Math.max(0,Math.min(255,Math.round(c+(factor>0?(255-c)*factor:c*factor))));
+  return '#'+[adj(r),adj(g),adj(b)].map(c=>c.toString(16).padStart(2,'0')).join('');
+}
+function subMuscleColors(zoneName,n){
+  const base=BODY_ZONES[zoneName].color;
+  if(n===1) return [base];
+  return Array.from({length:n},(_,i)=>shadeColor(base,((i/(n-1))-0.5)*0.7));
+}
+function routineMuscleVolume(){
+  const totals={};let uncovered=0;
+  const days=editingRoutineState&&editingRoutineState.days||[];
+  days.forEach(d=>{
+    (d.blocks||[]).forEach(b=>{
+      (b.exercises||[]).forEach(ex=>{
+        const lib=ex.exerciseId?allExercises.find(e=>e.id===ex.exerciseId):null;
+        if(!lib||!lib.muscle_activation){uncovered++;return;}
+        const sets=parseInt(ex.sets)||0;
+        const reps=parseRepsValue(ex.reps);
+        const vol=sets*reps;
+        if(vol<=0) return;
+        Object.entries(lib.muscle_activation).forEach(([m,pct])=>{
+          totals[m]=(totals[m]||0)+vol*pct/100;
+        });
+      });
+    });
+  });
+  return {totals,uncovered};
+}
+function exerciseContributionsToZone(zoneName){
+  const zoneMuscles=BODY_ZONES[zoneName].muscles;
+  const contribs=[];
+  const days=editingRoutineState&&editingRoutineState.days||[];
+  days.forEach(d=>{
+    (d.blocks||[]).forEach(b=>{
+      (b.exercises||[]).forEach(ex=>{
+        const lib=ex.exerciseId?allExercises.find(e=>e.id===ex.exerciseId):null;
+        if(!lib||!lib.muscle_activation) return;
+        const zonePct=zoneMuscles.reduce((s,m)=>s+(lib.muscle_activation[m]||0),0);
+        if(zonePct<=0) return;
+        const sets=parseInt(ex.sets)||0;
+        const reps=parseRepsValue(ex.reps);
+        const vol=sets*reps*zonePct/100;
+        if(vol<=0) return;
+        contribs.push({name:lib.name,reps:vol,day:d.name||'Día'});
+      });
+    });
+  });
+  return contribs.sort((a,b)=>b.reps-a.reps);
+}
+function showZoneDetail(zoneName){
+  const {totals}=routineMuscleVolume();
+  const zone=BODY_ZONES[zoneName];if(!zone) return;
+  const subMuscles=zone.muscles.map(m=>({m,label:MUSCLE_LABELS[m]||m,v:totals[m]||0})).filter(x=>x.v>0).sort((a,b)=>b.v-a.v);
+  const zoneTotal=subMuscles.reduce((s,x)=>s+x.v,0);
+  const grandTotal=Object.values(totals).reduce((s,v)=>s+v,0);
+  const zonePct=grandTotal>0?(zoneTotal/grandTotal*100).toFixed(1):0;
+  const colors=subMuscleColors(zoneName,subMuscles.length);
+  let svg='';
+  if(subMuscles.length>=2){
+    const cx=70,cy=70,r=64;let cum=-Math.PI/2;let paths='';
+    subMuscles.forEach((sm,i)=>{
+      const pct=sm.v/zoneTotal,ang=pct*2*Math.PI,sa=cum,ea=cum+ang;cum=ea;
+      const x1=cx+r*Math.cos(sa),y1=cy+r*Math.sin(sa);
+      const x2=cx+r*Math.cos(ea),y2=cy+r*Math.sin(ea);
+      const large=ang>Math.PI?1:0;
+      const d=`M ${cx} ${cy} L ${x1.toFixed(2)} ${y1.toFixed(2)} A ${r} ${r} 0 ${large} 1 ${x2.toFixed(2)} ${y2.toFixed(2)} Z`;
+      paths+=`<path d="${d}" fill="${colors[i]}" stroke="var(--cd)" stroke-width="2"/>`;
+    });
+    svg=`<svg width="140" height="140" viewBox="0 0 140 140" xmlns="http://www.w3.org/2000/svg" style="display:block;margin:0 auto">${paths}</svg>`;
+  } else if(subMuscles.length===1){
+    svg=`<div style="width:100px;height:100px;border-radius:50%;background:${colors[0]};margin:0 auto"></div>`;
+  }
+  let html=`<div style="font-size:20px;font-weight:800;margin-bottom:4px;color:${zone.color}">${zoneName}</div>`;
+  html+=`<div class="text-sm text-mt mb-16">${zonePct}% del volumen total · ${Math.round(zoneTotal)} reps efectivas</div>`;
+  html+=svg;
+  if(subMuscles.length>=2){
+    html+=`<div class="mt-16" style="padding-top:14px;border-top:1px solid var(--bd)">`;
+    subMuscles.forEach((sm,i)=>{
+      const pct=(sm.v/zoneTotal*100).toFixed(0);
+      const pctGlobal=(sm.v/grandTotal*100).toFixed(1);
+      html+=`<div class="row" style="padding:8px 0"><div class="flex" style="align-items:center;gap:10px;flex:1"><div style="width:14px;height:14px;border-radius:4px;background:${colors[i]};flex-shrink:0"></div><div><div class="fw-700" style="font-size:14px">${sm.label}</div><div class="text-xs text-mt">${pctGlobal}% global · ${Math.round(sm.v)} reps</div></div></div><div class="mono fw-800" style="font-size:18px">${pct}%</div></div>`;
+    });
+    html+=`</div>`;
+  }
+  const contribs=exerciseContributionsToZone(zoneName);
+  const byName={};
+  contribs.forEach(c=>{
+    if(!byName[c.name]) byName[c.name]={name:c.name,reps:0,days:new Set()};
+    byName[c.name].reps+=c.reps;byName[c.name].days.add(c.day);
+  });
+  const grouped=Object.values(byName).sort((a,b)=>b.reps-a.reps);
+  if(grouped.length){
+    html+=`<div class="mt-20" style="padding-top:14px;border-top:1px solid var(--bd)"><div class="text-xs text-mt fw-700 mb-12" style="letter-spacing:.5px">EJERCICIOS QUE APORTAN</div>`;
+    grouped.forEach(g=>{
+      const pctOfZone=(g.reps/zoneTotal*100).toFixed(0);
+      const dayList=[...g.days].join(', ');
+      html+=`<div class="row" style="padding:8px 0;border-bottom:1px solid var(--bd)"><div style="flex:1"><div class="fw-700" style="font-size:14px">${g.name}</div><div class="text-xs text-mt">${dayList}</div></div><div style="text-align:right"><div class="mono fw-800" style="font-size:14px">${Math.round(g.reps)}</div><div class="text-xs text-mt">${pctOfZone}%</div></div></div>`;
+    });
+    html+=`</div>`;
+  }
+  html+=`<button class="btn-out mt-20" onclick="closeModal()">Cerrar</button>`;
+  $("modal-content").innerHTML=html;$("modal").classList.add('show');
+}
+function drawRoutineMuscleChart(){
+  const sec=$("rted-volume-sec");if(!sec) return;
+  if(!editingRoutineState){sec.style.display='none';return;}
+  const {totals,uncovered}=routineMuscleVolume();
+  const zoneVols=Object.entries(BODY_ZONES).map(([name,def])=>({
+    name,v:def.muscles.reduce((s,m)=>s+(totals[m]||0),0),color:def.color
+  })).filter(z=>z.v>0).sort((a,b)=>b.v-a.v);
+  const total=zoneVols.reduce((s,z)=>s+z.v,0);
+  const days=editingRoutineState.days||[];
+  const exCount=days.reduce((s,d)=>s+(d.blocks||[]).reduce((a,b)=>a+(b.exercises?b.exercises.length:0),0),0);
+  // Mostrar solo si hay al menos un ejercicio agregado
+  if(exCount===0){sec.style.display='none';return;}
+  sec.style.display='block';
+  $("rted-volume-meta").textContent=`${exCount} ej. en ${days.length} día${days.length===1?'':'s'}`;
+  if(total===0){
+    const msg=uncovered>0
+      ?`Los ${uncovered} ejercicio${uncovered===1?'':'s'} no tienen series/reps cargadas todavía. Completá esos campos para ver el balance.`
+      :'Sin datos para calcular volumen. Completá series y reps en cada ejercicio.';
+    $("rted-volume").innerHTML=`<div class="text-sm text-mt center">${msg}</div>`;
+    return;
+  }
+  const cx=110,cy=110,r=100;let cum=-Math.PI/2;let paths='';
+  const slices=[];
+  zoneVols.forEach(z=>{
+    const subMs=BODY_ZONES[z.name].muscles.map(m=>({m,v:totals[m]||0})).filter(x=>x.v>0).sort((a,b)=>b.v-a.v);
+    const subColors=subMuscleColors(z.name,subMs.length);
+    subMs.forEach((sm,i)=>slices.push({zoneName:z.name,muscle:sm.m,v:sm.v,color:subColors[i],isLastInZone:i===subMs.length-1}));
+  });
+  slices.forEach(s=>{
+    const pct=s.v/total,ang=pct*2*Math.PI,sa=cum,ea=cum+ang;cum=ea;
+    const x1=cx+r*Math.cos(sa),y1=cy+r*Math.sin(sa);
+    const x2=cx+r*Math.cos(ea),y2=cy+r*Math.sin(ea);
+    const large=ang>Math.PI?1:0;
+    const d=slices.length===1
+      ?`M ${cx} ${cy-r} A ${r} ${r} 0 1 1 ${cx} ${cy+r} A ${r} ${r} 0 1 1 ${cx} ${cy-r} Z`
+      :`M ${cx} ${cy} L ${x1.toFixed(2)} ${y1.toFixed(2)} A ${r} ${r} 0 ${large} 1 ${x2.toFixed(2)} ${y2.toFixed(2)} Z`;
+    paths+=`<path d="${d}" fill="${s.color}" style="cursor:pointer" onclick="showZoneDetail('${s.zoneName}')"/>`;
+  });
+  let separators='';
+  if(slices.length>1){
+    let acc=-Math.PI/2;
+    slices.forEach(s=>{
+      const pct=s.v/total;acc+=pct*2*Math.PI;
+      const x=cx+r*Math.cos(acc),y=cy+r*Math.sin(acc);
+      const stroke=s.isLastInZone?'#FFFFFF':'rgba(0,0,0,0.18)';
+      const sw=s.isLastInZone?3.5:1.2;
+      separators+=`<line x1="${cx}" y1="${cy}" x2="${x.toFixed(2)}" y2="${y.toFixed(2)}" stroke="${stroke}" stroke-width="${sw}" stroke-linecap="round" pointer-events="none"/>`;
+    });
+  }
+  const svg=`<svg width="220" height="220" viewBox="0 0 220 220" xmlns="http://www.w3.org/2000/svg" style="display:block;margin:0 auto">${paths}${separators}</svg>`;
+  let legend=`<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px 14px;margin-top:18px">`;
+  zoneVols.forEach(z=>{
+    const pct=(z.v/total*100).toFixed(0);
+    legend+=`<div onclick="showZoneDetail('${z.name}')" style="display:flex;align-items:center;gap:8px;font-size:14px;cursor:pointer;padding:4px;border-radius:6px"><div style="width:12px;height:12px;border-radius:3px;background:${z.color};flex-shrink:0"></div><span class="text-mt" style="flex:1">${z.name}</span><span class="mono fw-700">${pct}%</span></div>`;
+  });
+  legend+=`</div>`;
+  legend+=`<div class="text-xs text-mt mt-8" style="text-align:center;font-style:italic">Tap en un grupo para ver el desglose</div>`;
+  // Patrón de movimiento (Push/Pull/Pierna/Core)
+  const groupVols={};
+  Object.entries(MUSCLE_GROUPS).forEach(([g,ms])=>{groupVols[g]=ms.reduce((s,m)=>s+(totals[m]||0),0);});
+  const groupTotal=Object.values(groupVols).reduce((a,b)=>a+b,0);
+  const groupColors={Push:'#dc2626',Pull:'#2563eb',Pierna:'#16a34a',Core:'#78716c'};
+  let groupBar='';
+  if(groupTotal>0){
+    groupBar=`<div class="text-xs text-mt fw-700 mt-20" style="margin-bottom:8px;letter-spacing:.5px">PATRÓN DE MOVIMIENTO</div>`;
+    groupBar+=`<div style="display:flex;border-radius:8px;overflow:hidden;height:8px;background:var(--bd)">`;
+    Object.entries(groupVols).forEach(([g,v])=>{const pct=v/groupTotal*100;if(pct>0)groupBar+=`<div style="width:${pct}%;background:${groupColors[g]}"></div>`;});
+    groupBar+=`</div>`;
+    groupBar+=`<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:4px;margin-top:8px;font-size:12px;text-align:center">`;
+    Object.entries(groupVols).forEach(([g,v])=>{
+      const pct=groupTotal>0?(v/groupTotal*100).toFixed(0):0;
+      groupBar+=`<div><div class="fw-700" style="color:${groupColors[g]}">${g}</div><div class="mono text-mt">${pct}%</div></div>`;
+    });
+    groupBar+=`</div>`;
+  }
+  let warn='';
+  if(uncovered>0) warn=`<div class="text-xs text-mt center mt-8" style="font-style:italic">⚠ ${uncovered} ejercicio${uncovered===1?'':'s'} sin asignar a la biblioteca (no contribuyen al balance)</div>`;
+  $("rted-volume").innerHTML=svg+legend+groupBar+warn;
 }
 
 // Cuando se guarda un alumno desde el editor, si veníamos del detalle, volvemos al detalle
