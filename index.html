@@ -223,13 +223,79 @@ body.modal-open{overflow:hidden;touch-action:none;}
     <button class="fab" onclick="openExerciseEditor(null)" title="Nuevo ejercicio">+</button>
   </div>
 
-  <!-- ══ ALUMNOS (placeholder) ══ -->
+  <!-- ══ ALUMNOS — Lista ══ -->
   <div id="pg-athletes" class="page">
-    <div class="header"><h1>Alumnos</h1></div>
-    <div class="card center">
-      <div style="font-size:48px;margin-bottom:12px">👥</div>
-      <div class="fw-700 mb-8">Próximamente</div>
-      <div class="text-sm text-mt">Acá vas a poder gestionar tus alumnos y sus rutinas.</div>
+    <div class="header">
+      <div><h1>Alumnos</h1><div class="header-sub" id="ath-coach-name"></div></div>
+    </div>
+    <input id="ath-search" class="search-input" placeholder="🔍 Buscar alumno..." oninput="renderAthleteList()">
+    <div id="ath-count" class="text-xs text-mt mb-12"></div>
+    <div id="ath-list"></div>
+    <button class="fab" onclick="openAthleteEditor(null)" title="Nuevo alumno">+</button>
+  </div>
+
+  <!-- ══ EDITOR DE ALUMNO ══ -->
+  <div id="pg-edit-athlete" class="page">
+    <div class="editor-header">
+      <button class="btn-back" onclick="closeAthleteEditor()">←</button>
+      <div class="editor-title" id="athed-title">Nuevo alumno</div>
+      <button id="btn-save-ath" class="btn-save" onclick="saveAthlete()">Guardar</button>
+    </div>
+
+    <div class="mb-16">
+      <label class="label">Nombre *</label>
+      <input id="athed-name" class="input" placeholder="Nombre y apellido">
+    </div>
+
+    <div class="mb-16">
+      <label class="label">Email (opcional)</label>
+      <input id="athed-email" class="input" type="email" placeholder="alumno@email.com">
+    </div>
+
+    <div class="flex gap-12 mb-16">
+      <div style="flex:1">
+        <label class="label">Fecha de nacimiento</label>
+        <input id="athed-birthdate" class="input" type="date">
+      </div>
+      <div style="flex:0 0 auto;align-self:flex-end;padding-bottom:14px">
+        <span class="text-xs text-mt">Edad:</span>
+        <span id="athed-age" class="fw-800 mono ml-4">—</span>
+      </div>
+    </div>
+
+    <div class="mb-16">
+      <label class="label">Nivel</label>
+      <div class="radio-group">
+        <button class="radio-btn" data-lvl="principiante" onclick="setAthLevel('principiante')">Principiante</button>
+        <button class="radio-btn" data-lvl="intermedio" onclick="setAthLevel('intermedio')">Intermedio</button>
+        <button class="radio-btn" data-lvl="avanzado" onclick="setAthLevel('avanzado')">Avanzado</button>
+      </div>
+    </div>
+
+    <div class="mb-16">
+      <label class="label">Objetivo principal</label>
+      <input id="athed-goal" class="input" placeholder="Ej: hipertrofia, bajar grasa, fuerza...">
+    </div>
+
+    <div class="mb-16">
+      <label class="label">Lesiones / limitaciones</label>
+      <textarea id="athed-injuries" class="input" placeholder="Ej: dolor de hombro derecho, rodilla izquierda sensible..."></textarea>
+    </div>
+
+    <div class="mb-16">
+      <label class="label">Notas generales</label>
+      <textarea id="athed-notes" class="input" placeholder="Cualquier dato útil que no entre en los campos anteriores"></textarea>
+    </div>
+
+    <div class="sec">
+      <div class="sec-title">Cargas iniciales (opcional)</div>
+      <div class="text-xs text-mt mb-12">Pesos de referencia al comenzar. Ayudan al armar la primera rutina.</div>
+      <div id="athed-loads"></div>
+      <button class="btn-out mt-8" onclick="openLoadPicker()">+ Agregar carga</button>
+    </div>
+
+    <div class="sec" id="athed-actions" style="display:none">
+      <button class="btn-danger" onclick="deleteAthlete()">🗑 Eliminar alumno</button>
     </div>
   </div>
 
@@ -369,6 +435,9 @@ let allExercises=[];
 let currentFilter='all';
 let editingExercise=null; // null = creando nuevo, objeto = editando
 let editorState=null;     // estado del editor mientras se edita
+let allAthletes=[];
+let editingAthlete=null;
+let editingAthleteState=null;
 
 // ══ HELPERS ══
 function $(id){return document.getElementById(id);}
@@ -428,7 +497,9 @@ function enterApp(){
   $("settings-name").textContent=name;
   $("settings-email").textContent=session.user.email;
   $("settings-role").textContent=role==='admin'?'Admin':'Coach';
+  $("ath-coach-name").textContent=name;
   loadExercises();
+  loadAthletes();
 }
 
 // ══ EXERCISE LIST ══
@@ -717,6 +788,180 @@ function duplicateExercise(){
   renderEditor();
   toast('Copiado. Ajustá lo que quieras y guardá.','success');
   window.scrollTo(0,0);
+}
+
+// ══ ATHLETES — LIST ══
+function calcAge(birthdate){
+  if(!birthdate) return null;
+  const b=new Date(birthdate+'T00:00:00');
+  if(isNaN(b)) return null;
+  const now=new Date();
+  let age=now.getFullYear()-b.getFullYear();
+  const m=now.getMonth()-b.getMonth();
+  if(m<0||(m===0&&now.getDate()<b.getDate())) age--;
+  return age>=0?age:null;
+}
+async function loadAthletes(){
+  if(!coachProfile)return;
+  const {data,error}=await sb.from('athletes').select('*').eq('coach_id',coachProfile.id).order('name',{ascending:true});
+  if(error){console.warn('loadAthletes error:',error.message);return;}
+  allAthletes=data;
+  renderAthleteList();
+}
+function renderAthleteList(){
+  const search=normalizeText($("ath-search")?.value||'');
+  const filtered=allAthletes.filter(a=>{
+    if(!search) return true;
+    const hay=normalizeText(a.name+' '+(a.email||''));
+    return hay.includes(search);
+  });
+  $("ath-count").textContent=`${filtered.length} alumno${filtered.length===1?'':'s'}`;
+  const list=$("ath-list");
+  if(!filtered.length){
+    list.innerHTML='<div class="text-sm text-mt center" style="padding:40px 0">'+(allAthletes.length===0?'Todavía no tenés alumnos. Tocá <b>+</b> para agregar el primero.':'Sin resultados')+'</div>';
+    return;
+  }
+  list.innerHTML=filtered.map(a=>{
+    const age=calcAge(a.birthdate);
+    const meta=[a.email,a.level&&(a.level.charAt(0).toUpperCase()+a.level.slice(1)),age?age+' años':null].filter(Boolean).join(' · ');
+    return `<div class="ex-card" onclick="openAthleteEditor('${a.id}')"><div class="ex-info"><div class="ex-name">${a.name}</div><div class="ex-meta">${meta||'—'}</div></div><div class="text-mt" style="font-size:18px;flex-shrink:0">→</div></div>`;
+  }).join('');
+}
+
+// ══ ATHLETES — EDITOR ══
+function openAthleteEditor(id){
+  if(id){
+    editingAthlete=allAthletes.find(a=>a.id===id);
+    if(!editingAthlete){toast('Alumno no encontrado','error');return;}
+    editingAthleteState={
+      id:editingAthlete.id,
+      name:editingAthlete.name||'',
+      email:editingAthlete.email||'',
+      birthdate:editingAthlete.birthdate||'',
+      level:editingAthlete.level||'',
+      primary_goal:editingAthlete.primary_goal||'',
+      injuries:editingAthlete.injuries||'',
+      notes:editingAthlete.notes||'',
+      starting_loads:{...(editingAthlete.starting_loads||{})}
+    };
+    $("athed-title").textContent='Editar alumno';
+  } else {
+    editingAthlete=null;
+    editingAthleteState={id:null,name:'',email:'',birthdate:'',level:'',primary_goal:'',injuries:'',notes:'',starting_loads:{}};
+    $("athed-title").textContent='Nuevo alumno';
+  }
+  renderAthleteEditor();
+  showPage('pg-edit-athlete');
+}
+function closeAthleteEditor(){editingAthlete=null;editingAthleteState=null;navTo('pg-athletes');}
+function renderAthleteEditor(){
+  const s=editingAthleteState;
+  $("athed-name").value=s.name;
+  $("athed-email").value=s.email;
+  $("athed-birthdate").value=s.birthdate;
+  $("athed-goal").value=s.primary_goal;
+  $("athed-injuries").value=s.injuries;
+  $("athed-notes").value=s.notes;
+  const age=calcAge(s.birthdate);
+  $("athed-age").textContent=age?age+' años':'—';
+  document.querySelectorAll('[data-lvl]').forEach(b=>b.classList.toggle('active',b.dataset.lvl===s.level));
+  renderStartingLoads();
+  $("athed-actions").style.display=editingAthlete?'block':'none';
+  // Listeners (re-bind por si la página se mostró antes)
+  $("athed-name").oninput=e=>{s.name=e.target.value;updateAthSaveBtn();};
+  $("athed-email").oninput=e=>{s.email=e.target.value;};
+  $("athed-birthdate").oninput=e=>{s.birthdate=e.target.value;const a=calcAge(s.birthdate);$("athed-age").textContent=a?a+' años':'—';};
+  $("athed-goal").oninput=e=>{s.primary_goal=e.target.value;};
+  $("athed-injuries").oninput=e=>{s.injuries=e.target.value;};
+  $("athed-notes").oninput=e=>{s.notes=e.target.value;};
+  updateAthSaveBtn();
+}
+function setAthLevel(l){
+  // Toggle: si ya está, deseleccionar
+  editingAthleteState.level=editingAthleteState.level===l?'':l;
+  document.querySelectorAll('[data-lvl]').forEach(b=>b.classList.toggle('active',b.dataset.lvl===editingAthleteState.level));
+}
+function updateAthSaveBtn(){$("btn-save-ath").disabled=!editingAthleteState.name.trim();}
+async function saveAthlete(){
+  const s=editingAthleteState;
+  if(!s.name.trim()) return toast('Falta el nombre','error');
+  const payload={
+    name:s.name.trim(),
+    email:s.email.trim()||null,
+    birthdate:s.birthdate||null,
+    level:s.level||null,
+    primary_goal:s.primary_goal.trim()||null,
+    injuries:s.injuries.trim()||null,
+    notes:s.notes.trim()||null,
+    starting_loads:s.starting_loads||{}
+  };
+  const btn=$("btn-save-ath");btn.disabled=true;btn.innerHTML='<span class="spinner"></span>';
+  let res;
+  if(editingAthlete){
+    res=await sb.from('athletes').update(payload).eq('id',editingAthlete.id);
+  } else {
+    payload.coach_id=coachProfile.id;
+    res=await sb.from('athletes').insert(payload);
+  }
+  btn.disabled=false;btn.textContent='Guardar';
+  if(res.error){toast(res.error.message,'error');return;}
+  toast(editingAthlete?'Alumno actualizado':'Alumno creado','success');
+  await loadAthletes();
+  closeAthleteEditor();
+}
+async function deleteAthlete(){
+  if(!editingAthlete) return;
+  if(!confirm(`¿Eliminar a "${editingAthlete.name}"?\n\nSe borrarán también todas sus rutinas. Esta acción no se puede deshacer.`)) return;
+  const {error}=await sb.from('athletes').delete().eq('id',editingAthlete.id);
+  if(error){toast(error.message,'error');return;}
+  toast('Alumno eliminado','success');
+  await loadAthletes();
+  closeAthleteEditor();
+}
+
+// ══ STARTING LOADS — sub-editor ══
+function renderStartingLoads(){
+  const c=$("athed-loads");
+  const loads=editingAthleteState.starting_loads||{};
+  const ids=Object.keys(loads);
+  if(!ids.length){
+    c.innerHTML='<div class="text-xs text-mt center" style="padding:8px 0">Sin cargas registradas</div>';
+    return;
+  }
+  c.innerHTML=ids.map(eid=>{
+    const ex=allExercises.find(e=>e.id===eid);
+    const name=ex?ex.name:eid;
+    return `<div class="card" style="padding:10px 14px;margin-bottom:6px"><div class="row"><div class="fw-700 text-sm" style="flex:1;min-width:0;padding-right:8px">${name}</div><div class="flex gap-8" style="align-items:center;flex-shrink:0"><input type="number" class="muscle-input-num" style="width:80px" min="0" step="0.5" value="${loads[eid]}" oninput="updateLoad('${eid}',this.value)"><span class="text-xs text-mt fw-700">kg</span><span class="muscle-x" onclick="removeStartingLoad('${eid}')">✕</span></div></div></div>`;
+  }).join('');
+}
+function updateLoad(eid,v){
+  const n=parseFloat(v);
+  if(isNaN(n)||n<0) return;
+  editingAthleteState.starting_loads[eid]=n;
+}
+function removeStartingLoad(eid){delete editingAthleteState.starting_loads[eid];renderStartingLoads();}
+function openLoadPicker(){
+  const used=new Set(Object.keys(editingAthleteState.starting_loads||{}));
+  const candidates=allExercises.filter(e=>!used.has(e.id));
+  let html=`<div class="fw-800 mb-12" style="font-size:18px">Agregar carga inicial</div>`;
+  html+=`<input class="search-input" placeholder="🔍 Buscar..." oninput="filterPickerList(this.value,'.load-pick-item')" autofocus>`;
+  html+=`<div style="max-height:55dvh;overflow-y:auto">`;
+  if(!candidates.length){
+    html+=`<div class="text-sm text-mt center" style="padding:30px 0">${allExercises.length?'Ya agregaste todos los ejercicios':'No hay ejercicios en la biblioteca'}</div>`;
+  } else {
+    candidates.forEach(ex=>{
+      const muscles=Object.keys(ex.muscle_activation||{}).slice(0,2).map(m=>MUSCLE_LABELS[m]||m).join(' · ');
+      html+=`<div class="picker-item load-pick-item" data-name="${normalizeText(ex.name+' '+(ex.aliases||[]).join(' '))}" onclick="addStartingLoad('${ex.id}')"><div><div class="fw-700 text-sm">${ex.name}</div><div class="text-xs text-mt">${muscles}</div></div></div>`;
+    });
+  }
+  html+=`</div><button class="btn-out mt-12" onclick="closeModal()">Cancelar</button>`;
+  $("modal-content").innerHTML=html;$("modal").classList.add('show');
+}
+function addStartingLoad(eid){
+  if(!editingAthleteState.starting_loads) editingAthleteState.starting_loads={};
+  editingAthleteState.starting_loads[eid]=0;
+  renderStartingLoads();
+  closeModal();
 }
 
 // ══ INIT ══
