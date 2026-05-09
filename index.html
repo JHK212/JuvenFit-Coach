@@ -183,6 +183,29 @@ body.modal-open{overflow:hidden;touch-action:none;}
 .fw-700{font-weight:700;}.fw-800{font-weight:800;}
 .mono{font-family:var(--fm);}
 .center{text-align:center;}
+/* ── Blocks editor ── */
+.day-card{background:var(--cd);border:1px solid var(--bd);border-radius:14px;padding:13px 16px;margin-bottom:10px;display:flex;align-items:center;gap:10px;transition:border-color .15s;}
+.day-card-body{flex:1;min-width:0;cursor:pointer;}
+.day-card-body:hover .day-card-name{color:var(--ac);}
+.day-card-name{font-weight:700;font-size:15px;transition:color .15s;}
+.day-card-meta{font-size:12px;color:var(--mt);margin-top:3px;}
+.micro-btn{font-size:15px;color:var(--mt);cursor:pointer;padding:4px 3px;line-height:1;flex-shrink:0;}
+.micro-btn:hover{color:var(--ac);}
+.block-wrap{background:var(--sf);border:1px solid var(--bd);border-radius:12px;padding:12px 14px;margin-bottom:12px;}
+.block-hd{display:flex;align-items:center;gap:6px;margin-bottom:10px;}
+.block-tag{font-size:10px;font-weight:700;padding:3px 8px;border-radius:6px;letter-spacing:0.5px;color:#fff;text-transform:uppercase;flex-shrink:0;}
+.bex-row{background:var(--cd);border:1px solid var(--bd);border-radius:10px;padding:11px 12px;margin-bottom:6px;}
+.bex-top{display:flex;align-items:center;gap:6px;}
+.bex-name{font-weight:700;font-size:14px;flex:1;cursor:pointer;transition:color .15s;}
+.bex-name:hover{color:var(--ac);}
+.bex-meta{font-size:12px;color:var(--mt);margin-top:3px;}
+.bex-expand{margin-top:10px;padding-top:10px;border-top:1px solid var(--bd);}
+.xfl{display:flex;gap:8px;align-items:flex-start;margin-bottom:8px;}
+.xfl:last-child{margin-bottom:0;}
+.xfl-lbl{font-size:11px;font-weight:700;color:var(--mt);text-transform:uppercase;letter-spacing:0.4px;min-width:64px;padding-top:6px;flex-shrink:0;}
+.xfl-inp{flex:1;background:var(--sf);border:1px solid var(--bd);border-radius:8px;padding:8px 10px;font-size:15px;color:var(--tx);outline:none;font-family:var(--fs);}
+.xfl-inp:focus{border-color:var(--ac);}
+textarea.xfl-inp{resize:none;min-height:48px;font-size:14px;}
 </style>
 </head>
 <body>
@@ -378,18 +401,35 @@ body.modal-open{overflow:hidden;touch-action:none;}
     </div>
 
     <div class="sec">
-      <div class="sec-title">Días y ejercicios</div>
-      <div class="card center">
-        <div style="font-size:36px;margin-bottom:8px">📋</div>
-        <div class="fw-700 mb-4">Editor de bloques · próxima etapa</div>
-        <div class="text-xs text-mt">Acá vas a poder armar los días con bloques (movilidad, principal, complementarios, finisher) y picar ejercicios desde la biblioteca.</div>
-        <div class="text-xs text-mt mt-8" id="rted-day-count"></div>
+      <div class="row mb-10">
+        <div class="sec-title" style="margin-bottom:0">Días y ejercicios</div>
+        <span class="text-xs text-mt" id="rted-day-count"></span>
       </div>
+      <div id="rted-days-list"></div>
+      <button class="btn-out mt-8" onclick="openDayEditor(-1)">+ Agregar día</button>
     </div>
 
     <div class="sec" id="rted-actions" style="display:none">
       <button class="btn-danger" onclick="deleteRoutine()">🗑 Eliminar rutina</button>
     </div>
+  </div>
+
+  <!-- ══ EDITOR DE DÍA (bloques + ejercicios) ══ -->
+  <div id="pg-edit-day" class="page">
+    <div class="editor-header">
+      <button class="btn-back" onclick="closeDayEditor()">←</button>
+      <div class="editor-title" id="dayed-title">Día</div>
+      <button class="btn-save" onclick="saveDayEditor()">OK</button>
+    </div>
+
+    <div class="mb-16">
+      <label class="label">Nombre del día</label>
+      <input id="dayed-name" class="input" placeholder="Ej: Día A — Empuje">
+    </div>
+
+    <div id="dayed-blocks"></div>
+
+    <button class="btn-out mt-8" onclick="openAddBlockPicker()">+ Agregar bloque</button>
   </div>
 
   <!-- ══ SETTINGS (placeholder) ══ -->
@@ -547,6 +587,7 @@ function closeModal(){$("modal").classList.remove('show');}
 function toast(msg,kind=''){const el=$("toast");el.className='toast show'+(kind?' '+kind:'');el.textContent=msg;setTimeout(()=>el.classList.remove('show'),2500);}
 function normalizeText(s){return(s||'').toString().toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'').trim();}
 function slugify(s){return normalizeText(s).replace(/[^a-z0-9]+/g,'-').replace(/^-+|-+$/g,'');}
+function uid(){return Math.random().toString(36).slice(2,8);}
 // MutationObserver para body modal-open (igual que PWA atleta)
 (function(){const m=document.getElementById('modal');if(m)new MutationObserver(()=>document.body.classList.toggle('modal-open',m.classList.contains('show'))).observe(m,{attributes:true,attributeFilter:['class']});})();
 
@@ -1200,7 +1241,7 @@ function renderRoutineEditor(){
   renderAssignedDays();
   document.querySelectorAll('[data-phase]').forEach(b=>b.classList.toggle('active',b.dataset.phase===s.phase));
   $("rted-actions").style.display=editingRoutine?'block':'none';
-  $("rted-day-count").textContent=`${(s.days||[]).length} día${(s.days||[]).length===1?'':'s'} configurado${(s.days||[]).length===1?'':'s'}`;
+  renderRoutineDays();
   $("rted-name").oninput=e=>{s.name=e.target.value;updateRtSaveBtn();};
   $("rted-startdate").oninput=e=>{s.start_date=e.target.value;};
   $("rted-freq").oninput=e=>{const n=parseInt(e.target.value);s.frequency_per_week=isNaN(n)?null:Math.max(1,Math.min(7,n));};
@@ -1290,6 +1331,288 @@ async function archiveRoutine(routineId){
 function closeRoutineEditor(){editingRoutine=null;editingRoutineState=null;showPage('pg-athlete-detail');}
 
 function showRoutineQR(routineId){toast('Generador de QR — etapa 4.6','');}
+
+// ══ BLOCKS / DAY BUILDER (4.5) ══
+const BLOCK_TYPES={
+  movilidad:{label:'Movilidad',color:'#78716c'},
+  principal:{label:'Principal',color:'#5A1A1A'},
+  complementario:{label:'Complementario',color:'#2563eb'},
+  finisher:{label:'Finisher',color:'#16a34a'},
+  custom:{label:'Personalizado',color:'#7c3aed'}
+};
+
+let editingDayIdx=null;
+let editingDayState=null;
+let expandedEx=null; // {bi, ei}
+
+function openDayEditor(dayIdx){
+  editingDayIdx=dayIdx;
+  if(dayIdx===-1){
+    const names=['A','B','C','D','E','F','G'];
+    const n=editingRoutineState.days.length;
+    editingDayState={id:uid(),name:'Día '+(names[n]||String(n+1)),blocks:[]};
+  } else {
+    editingDayState=JSON.parse(JSON.stringify(editingRoutineState.days[dayIdx]));
+    // Migrate old flat-exercises format to blocks
+    if(!editingDayState.blocks){
+      const oldEx=editingDayState.exercises||[];
+      editingDayState.blocks=oldEx.length?[{
+        id:uid(),type:'principal',label:'',
+        exercises:oldEx.map(ex=>({id:uid(),exerciseId:ex.exerciseId||ex.id||'',sets:ex.sets||null,reps:ex.reps||'',rest:ex.rest||'',objective:ex.objective||'',notes:ex.notes||''}))
+      }]:[];
+    }
+  }
+  expandedEx=null;
+  renderDayEditor();
+  showPage('pg-edit-day');
+}
+
+function closeDayEditor(){
+  editingDayIdx=null;editingDayState=null;expandedEx=null;
+  showPage('pg-edit-routine');
+}
+
+function saveDayEditor(){
+  if(!editingDayState) return;
+  const nameVal=$("dayed-name").value.trim();
+  if(nameVal) editingDayState.name=nameVal;
+  if(editingDayIdx===-1){
+    editingRoutineState.days.push(editingDayState);
+  } else {
+    editingRoutineState.days[editingDayIdx]=editingDayState;
+  }
+  renderRoutineDays();
+  closeDayEditor();
+}
+
+function removeRoutineDay(dayIdx){
+  const d=editingRoutineState.days[dayIdx];
+  if(!confirm(`¿Eliminar "${d.name||'este día'}"?`)) return;
+  editingRoutineState.days.splice(dayIdx,1);
+  renderRoutineDays();
+}
+
+function moveRoutineDay(dayIdx,dir){
+  const days=editingRoutineState.days;
+  const to=dayIdx+dir;
+  if(to<0||to>=days.length) return;
+  [days[dayIdx],days[to]]=[days[to],days[dayIdx]];
+  renderRoutineDays();
+}
+
+function renderRoutineDays(){
+  const days=editingRoutineState.days||[];
+  const c=$("rted-days-list");
+  if(!c) return;
+  if(!days.length){
+    c.innerHTML='<div class="text-xs text-mt center" style="padding:16px 0">Sin días. Tap + para agregar.</div>';
+  } else {
+    c.innerHTML=days.map((d,i)=>{
+      const blocks=d.blocks||[];
+      const exCount=blocks.reduce((s,b)=>s+(b.exercises?b.exercises.length:0),0);
+      const meta=blocks.length?`${blocks.length} bloque${blocks.length===1?'':'s'} · ${exCount} ej.`:'Sin bloques';
+      return `<div class="day-card">
+        <div class="day-card-body" onclick="openDayEditor(${i})">
+          <div class="day-card-name">${d.name||'Día '+(i+1)}</div>
+          <div class="day-card-meta">${meta}</div>
+        </div>
+        <div class="flex gap-4" style="flex-shrink:0;align-items:center">
+          ${i>0?`<span class="micro-btn" onclick="moveRoutineDay(${i},-1)">↑</span>`:'<span style="width:23px"></span>'}
+          ${i<days.length-1?`<span class="micro-btn" onclick="moveRoutineDay(${i},1)">↓</span>`:'<span style="width:23px"></span>'}
+          <span class="micro-btn" style="color:var(--dn)" onclick="removeRoutineDay(${i})">✕</span>
+        </div>
+      </div>`;
+    }).join('');
+  }
+  $("rted-day-count").textContent=days.length?`${days.length} día${days.length===1?'':'s'}`:'';
+}
+
+// ── Day editor ──
+function renderDayEditor(){
+  $("dayed-name").value=editingDayState.name||'';
+  $("dayed-title").textContent=editingDayState.name||'Día';
+  $("dayed-name").oninput=e=>{
+    editingDayState.name=e.target.value;
+    $("dayed-title").textContent=e.target.value||'Día';
+  };
+  const blocks=editingDayState.blocks||[];
+  const c=$("dayed-blocks");
+  if(!blocks.length){
+    c.innerHTML='<div class="text-xs text-mt center" style="padding:20px 0">Sin bloques. Tap + para agregar.</div>';
+  } else {
+    c.innerHTML=blocks.map((b,bi)=>renderBlockHTML(b,bi)).join('');
+  }
+}
+
+function renderBlockHTML(b,bi){
+  const bt=BLOCK_TYPES[b.type]||BLOCK_TYPES.custom;
+  const color=bt.color;
+  const label=b.type==='custom'&&b.label?b.label:bt.label;
+  const blocks=editingDayState.blocks;
+  const exs=b.exercises||[];
+  let html=`<div class="block-wrap">
+    <div class="block-hd">
+      <span class="block-tag" style="background:${color}">${label}</span>
+      <span style="flex:1"></span>
+      ${bi>0?`<span class="micro-btn" onclick="moveBlock(${bi},-1)">↑</span>`:''}
+      ${bi<blocks.length-1?`<span class="micro-btn" onclick="moveBlock(${bi},1)">↓</span>`:''}
+      <span class="micro-btn" style="color:var(--dn)" onclick="removeBlock(${bi})">✕</span>
+    </div>`;
+  if(exs.length){
+    html+=exs.map((ex,ei)=>renderBexRowHTML(ex,bi,ei)).join('');
+  } else {
+    html+=`<div class="text-xs text-mt center" style="padding:8px 0">Sin ejercicios</div>`;
+  }
+  html+=`<button class="btn-out mt-8" style="font-size:13px;padding:9px" onclick="openExPickerForBlock(${bi})">+ Ejercicio</button>`;
+  html+=`</div>`;
+  return html;
+}
+
+function renderBexRowHTML(ex,bi,ei){
+  const libEx=allExercises.find(e=>e.id===ex.exerciseId);
+  const name=libEx?libEx.name:(ex.exerciseId||'Ejercicio');
+  const isExp=expandedEx&&expandedEx.bi===bi&&expandedEx.ei===ei;
+  const metaParts=[];
+  if(ex.sets&&ex.reps) metaParts.push(`${ex.sets}×${ex.reps}`);
+  else if(ex.sets) metaParts.push(`${ex.sets} series`);
+  else if(ex.reps) metaParts.push(ex.reps);
+  if(ex.rest) metaParts.push(`${ex.rest} des`);
+  const meta=metaParts.join(' · ');
+  const exs=editingDayState.blocks[bi].exercises;
+  const s=v=>(v!=null&&v!==undefined)?String(v):'';
+  let html=`<div class="bex-row">
+    <div class="bex-top">
+      <span class="bex-name" onclick="toggleExExpand(${bi},${ei})">${name}</span>
+      ${ei>0?`<span class="micro-btn" onclick="moveExercise(${bi},${ei},-1)">↑</span>`:''}
+      ${ei<exs.length-1?`<span class="micro-btn" onclick="moveExercise(${bi},${ei},1)">↓</span>`:''}
+      <span class="micro-btn" style="color:var(--dn)" onclick="removeExercise(${bi},${ei})">✕</span>
+    </div>
+    ${meta?`<div class="bex-meta">${meta}</div>`:''}`;
+  if(isExp){
+    html+=`<div class="bex-expand">
+      <div class="xfl">
+        <span class="xfl-lbl">Series</span>
+        <input type="number" class="xfl-inp" min="1" max="20" inputmode="numeric" value="${s(ex.sets)}" placeholder="4" oninput="upEx(${bi},${ei},'sets',this.value)" style="max-width:80px;flex:none">
+      </div>
+      <div class="xfl">
+        <span class="xfl-lbl">Reps</span>
+        <input type="text" class="xfl-inp" value="${s(ex.reps)}" placeholder="8-10 / AMRAP / 30 segs" oninput="upEx(${bi},${ei},'reps',this.value)">
+      </div>
+      <div class="xfl">
+        <span class="xfl-lbl">Descanso</span>
+        <input type="text" class="xfl-inp" value="${s(ex.rest)}" placeholder="90 segs / 2 min" oninput="upEx(${bi},${ei},'rest',this.value)">
+      </div>
+      <div class="xfl">
+        <span class="xfl-lbl">Objetivo</span>
+        <input type="text" class="xfl-inp" value="${s(ex.objective)}" placeholder="hipertrofia, fuerza..." oninput="upEx(${bi},${ei},'objective',this.value)">
+      </div>
+      <div class="xfl" style="align-items:flex-start">
+        <span class="xfl-lbl" style="padding-top:8px">Notas</span>
+        <textarea class="xfl-inp" rows="2" placeholder="Cues, variantes..." oninput="upEx(${bi},${ei},'notes',this.value)">${s(ex.notes)}</textarea>
+      </div>
+    </div>`;
+  }
+  html+=`</div>`;
+  return html;
+}
+
+function toggleExExpand(bi,ei){
+  expandedEx=(expandedEx&&expandedEx.bi===bi&&expandedEx.ei===ei)?null:{bi,ei};
+  renderDayEditor();
+}
+
+function upEx(bi,ei,field,val){
+  const ex=editingDayState.blocks[bi].exercises[ei];
+  ex[field]=field==='sets'?(parseInt(val)||null):val;
+}
+
+function moveBlock(bi,dir){
+  const blocks=editingDayState.blocks;
+  const to=bi+dir;
+  if(to<0||to>=blocks.length) return;
+  [blocks[bi],blocks[to]]=[blocks[to],blocks[bi]];
+  if(expandedEx){
+    if(expandedEx.bi===bi) expandedEx.bi=to;
+    else if(expandedEx.bi===to) expandedEx.bi=bi;
+  }
+  renderDayEditor();
+}
+
+function removeBlock(bi){
+  if(!confirm('¿Eliminar este bloque y todos sus ejercicios?')) return;
+  editingDayState.blocks.splice(bi,1);
+  if(expandedEx&&expandedEx.bi===bi) expandedEx=null;
+  renderDayEditor();
+}
+
+function moveExercise(bi,ei,dir){
+  const exs=editingDayState.blocks[bi].exercises;
+  const to=ei+dir;
+  if(to<0||to>=exs.length) return;
+  [exs[ei],exs[to]]=[exs[to],exs[ei]];
+  if(expandedEx&&expandedEx.bi===bi){
+    if(expandedEx.ei===ei) expandedEx.ei=to;
+    else if(expandedEx.ei===to) expandedEx.ei=ei;
+  }
+  renderDayEditor();
+}
+
+function removeExercise(bi,ei){
+  editingDayState.blocks[bi].exercises.splice(ei,1);
+  if(expandedEx&&expandedEx.bi===bi&&expandedEx.ei===ei) expandedEx=null;
+  renderDayEditor();
+}
+
+function openAddBlockPicker(){
+  const descs={movilidad:'Entrada en calor, movilidad articular',principal:'Ejercicios compuestos principales',complementario:'Ejercicios accesorios y de aislación',finisher:'Cierre de entrenamiento',custom:'Nombre personalizado'};
+  let html=`<div class="fw-800 mb-12" style="font-size:18px">Agregar bloque</div>`;
+  Object.entries(BLOCK_TYPES).forEach(([type,bt])=>{
+    html+=`<div class="picker-item" onclick="addBlock('${type}')">
+      <div>
+        <span class="block-tag" style="background:${bt.color}">${bt.label}</span>
+        <div class="text-xs text-mt mt-4">${descs[type]}</div>
+      </div>
+    </div>`;
+  });
+  html+=`<button class="btn-out mt-12" onclick="closeModal()">Cancelar</button>`;
+  $("modal-content").innerHTML=html;$("modal").classList.add('show');
+}
+
+function addBlock(type){
+  let label='';
+  if(type==='custom'){label=prompt('Nombre del bloque personalizado:','');if(label===null)return;label=label.trim();}
+  if(!editingDayState.blocks) editingDayState.blocks=[];
+  editingDayState.blocks.push({id:uid(),type,label,exercises:[]});
+  closeModal();
+  renderDayEditor();
+}
+
+function openExPickerForBlock(bi){
+  let html=`<div class="fw-800 mb-12" style="font-size:18px">Agregar ejercicio</div>`;
+  html+=`<input class="search-input" placeholder="🔍 Buscar..." oninput="filterPickerList(this.value,'.expick-item')" autofocus>`;
+  html+=`<div style="max-height:52dvh;overflow-y:auto">`;
+  if(allExercises.length){
+    allExercises.forEach(ex=>{
+      const muscles=Object.keys(ex.muscle_activation||{}).slice(0,2).map(m=>MUSCLE_LABELS[m]||m).join(' · ');
+      html+=`<div class="picker-item expick-item" data-name="${normalizeText(ex.name+' '+(ex.aliases||[]).join(' '))}" onclick="addExerciseToBlock(${bi},'${ex.id}')">
+        <div><div class="fw-700 text-sm">${ex.name}</div><div class="text-xs text-mt">${muscles}</div></div>
+      </div>`;
+    });
+  } else {
+    html+=`<div class="text-sm text-mt center" style="padding:30px 0">Biblioteca vacía</div>`;
+  }
+  html+=`</div><button class="btn-out mt-12" onclick="closeModal()">Cancelar</button>`;
+  $("modal-content").innerHTML=html;$("modal").classList.add('show');
+}
+
+function addExerciseToBlock(bi,exId){
+  if(!editingDayState.blocks[bi].exercises) editingDayState.blocks[bi].exercises=[];
+  const ei=editingDayState.blocks[bi].exercises.length;
+  editingDayState.blocks[bi].exercises.push({id:uid(),exerciseId:exId,sets:null,reps:'',rest:'',objective:'',notes:''});
+  closeModal();
+  expandedEx={bi,ei};
+  renderDayEditor();
+}
 
 // Cuando se guarda un alumno desde el editor, si veníamos del detalle, volvemos al detalle
 const _origCloseAthEditor=closeAthleteEditor;
