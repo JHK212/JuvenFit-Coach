@@ -344,7 +344,9 @@ body.modal-open{overflow:hidden;touch-action:none;}
 // ══ CONFIG ══
 const SUPABASE_URL='https://erwatvliyfcusfghonzg.supabase.co';
 const SUPABASE_ANON='sb_publishable_8HKIn2Pw_afJvdq-FTKO4Q_samO09Fj';
-const sb=window.supabase.createClient(SUPABASE_URL,SUPABASE_ANON);
+const sb=window.supabase.createClient(SUPABASE_URL,SUPABASE_ANON,{
+  auth:{persistSession:true,autoRefreshToken:true,storageKey:'juvenfit-coach-auth'}
+});
 
 // ══ MUSCLE CONSTANTS (deben matchear con la PWA atleta) ══
 const MUSCLES=['pecho_sup','pecho_med','pecho_inf','dorsal','trapecio','lumbar','biceps','triceps','antebrazo','delt_ant','delt_lat','delt_post','cuadriceps','isquios','gluteo','gemelos','aductor','core'];
@@ -394,12 +396,29 @@ async function doLogin(){
   btn.disabled=false;btn.textContent='Entrar';
   if(error){errEl.textContent=error.message||'Error al iniciar sesión';return;}
   session=data.session;
+  // Recordar email para próxima visita
+  try{localStorage.setItem('coach-last-email',email);}catch{}
   await loadCoachProfile();
   enterApp();
 }
-async function doLogout(){await sb.auth.signOut();session=null;coachProfile=null;$("login-email").value='';$("login-pass").value='';$("bottom-nav").style.display='none';showPage('pg-login');}
+async function doLogout(){
+  await sb.auth.signOut();
+  session=null;coachProfile=null;
+  // No borro el email guardado — para que quede prellenado al re-loguearse
+  $("login-pass").value='';
+  $("bottom-nav").style.display='none';
+  showPage('pg-login');
+  // Re-prellenar el email
+  try{const last=localStorage.getItem('coach-last-email');if(last)$("login-email").value=last;}catch{}
+}
 async function loadCoachProfile(){if(!session)return null;const {data,error}=await sb.from('coaches').select('*').eq('id',session.user.id).single();if(error){console.warn('coach profile error:',error.message);return null;}coachProfile=data;return data;}
-async function checkAuthOnLoad(){const {data}=await sb.auth.getSession();if(data.session){session=data.session;await loadCoachProfile();enterApp();}else{showPage('pg-login');}}
+async function checkAuthOnLoad(){
+  // Prellenar email del último login
+  try{const last=localStorage.getItem('coach-last-email');if(last)$("login-email").value=last;}catch{}
+  const {data}=await sb.auth.getSession();
+  if(data.session){session=data.session;await loadCoachProfile();enterApp();}
+  else{showPage('pg-login');setTimeout(()=>$("login-pass").focus(),100);}
+}
 function enterApp(){
   $("bottom-nav").style.display='flex';
   navTo('pg-main');
@@ -563,11 +582,32 @@ function renderMuscleEditor(editable){
   $("btn-save-ex").disabled=total!==100||!editorState.name.trim()||editorState.muscleActivation.length===0;
 }
 function muscleTotal(){return editorState.muscleActivation.reduce((s,m)=>s+(parseFloat(m.pct)||0),0);}
+function updateMuscleTotalUI(){
+  const total=muscleTotal();
+  const tEl=$("muscle-total");
+  $("muscle-total-val").textContent=`${total}%`;
+  tEl.classList.remove('ok','warn','over');
+  if(total===100) tEl.classList.add('ok');
+  else if(total<100) tEl.classList.add('warn');
+  else tEl.classList.add('over');
+  $("btn-save-ex").disabled=total!==100||!editorState.name.trim()||editorState.muscleActivation.length===0;
+}
+// Update liviano: solo cambia el % de un músculo sin re-renderear toda la lista (slider fluido)
 function onMusclePctChange(i,v){
   let n=parseFloat(v)||0;
   if(n<0)n=0;if(n>100)n=100;
-  editorState.muscleActivation[i].pct=Math.round(n);
-  renderMuscleEditor(canEdit(editingExercise));
+  n=Math.round(n);
+  editorState.muscleActivation[i].pct=n;
+  // Actualizar visualmente solo el row afectado
+  const rows=document.querySelectorAll('#muscle-list .muscle-row');
+  const row=rows[i];
+  if(row){
+    const slider=row.querySelector('.muscle-slider');
+    const numInput=row.querySelector('.muscle-input-num');
+    if(slider){slider.value=n;slider.style.setProperty('--pct',n+'%');}
+    if(numInput&&numInput!==document.activeElement) numInput.value=n;
+  }
+  updateMuscleTotalUI();
 }
 function removeMuscle(i){editorState.muscleActivation.splice(i,1);renderMuscleEditor(canEdit(editingExercise));}
 function balanceMuscles(){
