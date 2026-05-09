@@ -115,6 +115,17 @@ textarea.input{resize:vertical;min-height:70px;font-family:var(--fs);font-size:1
 .muscle-slider::-moz-range-thumb{width:24px;height:24px;border-radius:50%;background:white;border:3px solid var(--col,#888);cursor:pointer;}
 .muscle-input-num{width:60px;background:var(--sf);border:1px solid var(--bd);border-radius:8px;padding:6px;font-family:var(--fm);font-weight:700;text-align:center;font-size:16px;color:var(--tx);outline:none;}
 
+/* Day pills (L M X J V S D) */
+.day-row{display:flex;gap:6px;}
+.day-pill{flex:1;min-width:32px;padding:11px 4px;background:var(--cd);border:1px solid var(--bd);border-radius:10px;font-size:14px;font-weight:700;cursor:pointer;text-align:center;font-family:var(--fs);}
+.day-pill.active{background:var(--ac);color:#fff;border-color:var(--ac);}
+
+/* Routine card en detalle */
+.rt-card{background:var(--cd);border:1px solid var(--bd);border-radius:14px;padding:16px;margin-bottom:10px;cursor:pointer;transition:border-color .15s;}
+.rt-card:hover{border-color:var(--ac);}
+.rt-card.active{border-color:var(--ac);background:linear-gradient(135deg,#FFF 0%,#FAF6F0 100%);}
+.rt-card.archived{opacity:0.85;}
+
 /* Total muscle */
 .muscle-total{padding:10px 14px;border-radius:10px;font-size:14px;font-weight:700;display:flex;justify-content:space-between;align-items:center;margin-top:8px;}
 .muscle-total.ok{background:rgba(22,163,74,0.1);color:var(--gn);}
@@ -293,6 +304,94 @@ body.modal-open{overflow:hidden;touch-action:none;}
     </div>
   </div>
 
+  <!-- ══ DETALLE DEL ALUMNO ══ -->
+  <div id="pg-athlete-detail" class="page">
+    <div class="editor-header">
+      <button class="btn-back" onclick="closeAthleteDetail()">←</button>
+      <div class="editor-title" id="adet-name"></div>
+      <button class="btn-save" onclick="editCurrentAthlete()" title="Editar datos">✎</button>
+    </div>
+
+    <div id="adet-info"></div>
+
+    <div class="sec">
+      <div class="sec-title">🟢 Rutina activa</div>
+      <div id="adet-active"></div>
+    </div>
+
+    <button class="btn mt-12" onclick="openRoutineEditor(null)">+ Crear rutina nueva</button>
+    <div id="adet-active-warning" class="text-xs text-mt mt-8 center" style="display:none">⚠ La rutina activa actual se archivará automáticamente</div>
+
+    <div class="sec">
+      <div class="sec-title">📦 Histórico</div>
+      <div id="adet-archived"></div>
+    </div>
+  </div>
+
+  <!-- ══ EDITOR DE RUTINA (metadatos) ══ -->
+  <div id="pg-edit-routine" class="page">
+    <div class="editor-header">
+      <button class="btn-back" onclick="closeRoutineEditor()">←</button>
+      <div class="editor-title" id="rted-title">Nueva rutina</div>
+      <button id="btn-save-rt" class="btn-save" onclick="saveRoutine()">Guardar</button>
+    </div>
+
+    <div id="rted-display-id" class="text-xs text-mt center mb-12 mono"></div>
+
+    <div class="mb-16">
+      <label class="label">Nombre *</label>
+      <input id="rted-name" class="input" placeholder="Ej: Mayo 2026 - Hipertrofia">
+    </div>
+
+    <div class="flex gap-12 mb-16">
+      <div style="flex:1">
+        <label class="label">Inicio</label>
+        <input id="rted-startdate" class="input" type="date">
+      </div>
+      <div style="flex:0 0 120px">
+        <label class="label">Frec/sem</label>
+        <input id="rted-freq" class="input input-num" type="number" min="1" max="7" inputmode="numeric" placeholder="3">
+      </div>
+    </div>
+
+    <div class="mb-16">
+      <label class="label">Días asignados</label>
+      <div class="day-row" id="rted-days"></div>
+      <div class="text-xs text-mt mt-4">Tap para alternar. Ayuda al alumno a saber qué día le toca.</div>
+    </div>
+
+    <div class="mb-16">
+      <label class="label">Etapa</label>
+      <div class="radio-group">
+        <button class="radio-btn" data-phase="adaptacion" onclick="setRoutinePhase('adaptacion')">Adaptación</button>
+        <button class="radio-btn" data-phase="progresion" onclick="setRoutinePhase('progresion')">Progresión</button>
+      </div>
+      <div class="radio-group mt-8">
+        <button class="radio-btn" data-phase="descarga" onclick="setRoutinePhase('descarga')">Descarga</button>
+        <button class="radio-btn" data-phase="mantenimiento" onclick="setRoutinePhase('mantenimiento')">Mantenimiento</button>
+      </div>
+    </div>
+
+    <div class="mb-16">
+      <label class="label">Observaciones del coach</label>
+      <textarea id="rted-coachnotes" class="input" placeholder="Ej: cuidar rodilla derecha, priorizar técnica en banca..."></textarea>
+    </div>
+
+    <div class="sec">
+      <div class="sec-title">Días y ejercicios</div>
+      <div class="card center">
+        <div style="font-size:36px;margin-bottom:8px">📋</div>
+        <div class="fw-700 mb-4">Editor de bloques · próxima etapa</div>
+        <div class="text-xs text-mt">Acá vas a poder armar los días con bloques (movilidad, principal, complementarios, finisher) y picar ejercicios desde la biblioteca.</div>
+        <div class="text-xs text-mt mt-8" id="rted-day-count"></div>
+      </div>
+    </div>
+
+    <div class="sec" id="rted-actions" style="display:none">
+      <button class="btn-danger" onclick="deleteRoutine()">🗑 Eliminar rutina</button>
+    </div>
+  </div>
+
   <!-- ══ SETTINGS (placeholder) ══ -->
   <div id="pg-settings" class="page">
     <div class="header"><h1>Configuración</h1></div>
@@ -432,6 +531,10 @@ let editorState=null;     // estado del editor mientras se edita
 let allAthletes=[];
 let editingAthlete=null;
 let editingAthleteState=null;
+let allRoutines=[];           // rutinas del alumno actualmente abierto
+let currentAthleteId=null;    // alumno cuyo detalle estoy viendo
+let editingRoutine=null;
+let editingRoutineState=null;
 
 // ══ HELPERS ══
 function $(id){return document.getElementById(id);}
@@ -807,7 +910,7 @@ function renderAthleteList(){
   }
   list.innerHTML=filtered.map(a=>{
     const meta=[a.email,a.level&&(a.level.charAt(0).toUpperCase()+a.level.slice(1)),a.age?a.age+' años':null].filter(Boolean).join(' · ');
-    return `<div class="ex-card" onclick="openAthleteEditor('${a.id}')"><div class="ex-info"><div class="ex-name">${a.name}</div><div class="ex-meta">${meta||'—'}</div></div><div class="text-mt" style="font-size:18px;flex-shrink:0">→</div></div>`;
+    return `<div class="ex-card" onclick="openAthleteDetail('${a.id}')"><div class="ex-info"><div class="ex-name">${a.name}</div><div class="ex-meta">${meta||'—'}</div></div><div class="text-mt" style="font-size:18px;flex-shrink:0">→</div></div>`;
   }).join('');
 }
 
@@ -944,6 +1047,261 @@ function addStartingLoad(eid){
   renderStartingLoads();
   closeModal();
 }
+
+// ══ ATHLETE DETAIL ══
+function capitalize(s){return s?s.charAt(0).toUpperCase()+s.slice(1):s;}
+function formatDateShort(d){
+  if(!d) return '—';
+  const dt=new Date(d+(d.length<=10?'T00:00:00':''));
+  if(isNaN(dt)) return d;
+  return dt.toLocaleDateString('es-AR',{day:'numeric',month:'short',year:'numeric'});
+}
+function relativeTime(dateStr){
+  if(!dateStr) return '';
+  const d=new Date(dateStr);
+  if(isNaN(d)) return '';
+  const days=Math.floor((Date.now()-d.getTime())/(1000*60*60*24));
+  if(days<1) return 'hoy';
+  if(days===1) return 'hace 1 día';
+  if(days<30) return `hace ${days} días`;
+  const months=Math.floor(days/30);
+  if(months===1) return 'hace 1 mes';
+  if(months<12) return `hace ${months} meses`;
+  const years=Math.floor(months/12);
+  return years===1?'hace 1 año':`hace ${years} años`;
+}
+const PHASE_LABELS={adaptacion:'Adaptación',progresion:'Progresión',descarga:'Descarga',mantenimiento:'Mantenimiento'};
+const WEEK_DAYS=[
+  {key:'monday',label:'L',name:'Lunes'},{key:'tuesday',label:'M',name:'Martes'},
+  {key:'wednesday',label:'X',name:'Miércoles'},{key:'thursday',label:'J',name:'Jueves'},
+  {key:'friday',label:'V',name:'Viernes'},{key:'saturday',label:'S',name:'Sábado'},
+  {key:'sunday',label:'D',name:'Domingo'}
+];
+
+async function openAthleteDetail(id){
+  const a=allAthletes.find(x=>x.id===id);
+  if(!a){toast('Alumno no encontrado','error');return;}
+  currentAthleteId=id;
+  $("adet-name").textContent=a.name;
+  // Render info
+  const lines=[];
+  if(a.email) lines.push(`<div class="text-sm">${a.email}</div>`);
+  const meta=[a.age?a.age+' años':null,a.level&&capitalize(a.level)].filter(Boolean).join(' · ');
+  if(meta) lines.push(`<div class="text-sm text-mt">${meta}</div>`);
+  if(a.primary_goal) lines.push(`<div class="text-sm mt-8"><span class="text-mt fw-700">Objetivo:</span> ${a.primary_goal}</div>`);
+  if(a.injuries) lines.push(`<div class="text-sm mt-4"><span class="text-mt fw-700">Lesiones:</span> ${a.injuries}</div>`);
+  const loadIds=Object.keys(a.starting_loads||{});
+  if(loadIds.length){
+    const loadStrs=loadIds.slice(0,5).map(eid=>{const ex=allExercises.find(e=>e.id===eid);return (ex?ex.name:eid)+' '+a.starting_loads[eid]+'kg';}).join(' · ');
+    lines.push(`<div class="text-xs text-mt mt-8">💪 ${loadStrs}${loadIds.length>5?' · ...':''}</div>`);
+  }
+  if(a.notes) lines.push(`<div class="text-sm mt-8 text-mt" style="font-style:italic">${a.notes}</div>`);
+  $("adet-info").innerHTML=`<div class="card">${lines.join('')||'<div class="text-sm text-mt">Sin datos adicionales</div>'}</div>`;
+  showPage('pg-athlete-detail');
+  await loadAthleteRoutines(id);
+}
+
+function closeAthleteDetail(){currentAthleteId=null;allRoutines=[];navTo('pg-athletes');}
+function editCurrentAthlete(){if(currentAthleteId) openAthleteEditor(currentAthleteId);}
+
+async function loadAthleteRoutines(athleteId){
+  $("adet-active").innerHTML='<div class="text-sm text-mt center" style="padding:20px 0">Cargando...</div>';
+  $("adet-archived").innerHTML='';
+  const {data,error}=await sb.from('routines').select('*').eq('athlete_id',athleteId).order('created_at',{ascending:false});
+  if(error){$("adet-active").innerHTML=`<div class="text-sm text-dn">Error: ${error.message}</div>`;return;}
+  allRoutines=data;
+  renderRoutinesInDetail();
+}
+
+function renderRoutinesInDetail(){
+  const active=allRoutines.find(r=>r.status==='active');
+  const archived=allRoutines.filter(r=>r.status==='archived');
+  $("adet-active-warning").style.display=active?'block':'none';
+  if(active){
+    $("adet-active").innerHTML=routineCard(active,true);
+  } else {
+    $("adet-active").innerHTML='<div class="text-sm text-mt center" style="padding:20px 0">Sin rutina activa</div>';
+  }
+  if(archived.length){
+    $("adet-archived").innerHTML=archived.map(r=>routineCard(r,false)).join('');
+  } else {
+    $("adet-archived").innerHTML='<div class="text-xs text-mt center" style="padding:8px 0">Sin rutinas archivadas</div>';
+  }
+}
+
+function routineCard(r,isActive){
+  const dayCount=(r.days||[]).length;
+  const phaseLabel=r.phase?PHASE_LABELS[r.phase]:null;
+  const dateStr=r.start_date?formatDateShort(r.start_date):relativeTime(r.created_at);
+  let html=`<div class="rt-card${isActive?' active':' archived'}" onclick="openRoutineEditor('${r.id}')">`;
+  html+=`<div class="row mb-4" style="align-items:flex-start;gap:8px"><span class="fw-700" style="flex:1">${r.name}</span>${r.display_id?`<span class="text-xs text-mt mono" style="flex-shrink:0">${r.display_id}</span>`:''}</div>`;
+  const metaParts=[`${dayCount} día${dayCount===1?'':'s'}`,`inicio ${dateStr}`];
+  if(phaseLabel) metaParts.push(phaseLabel);
+  if(r.frequency_per_week) metaParts.push(`${r.frequency_per_week}×/sem`);
+  html+=`<div class="text-xs text-mt">${metaParts.join(' · ')}</div>`;
+  if(r.coach_notes&&isActive) html+=`<div class="text-xs text-mt mt-8" style="font-style:italic">📝 ${r.coach_notes}</div>`;
+  if(!isActive&&r.archived_at) html+=`<div class="text-xs text-mt mt-4">Archivada ${relativeTime(r.archived_at)}</div>`;
+  if(isActive){
+    html+=`<div class="flex gap-8 mt-12">`;
+    html+=`<button class="btn-sm btn-out" style="flex:1" onclick="event.stopPropagation();openRoutineEditor('${r.id}')">✎ Editar</button>`;
+    html+=`<button class="btn-sm btn-out" style="flex:1" onclick="event.stopPropagation();showRoutineQR('${r.id}')">📱 QR</button>`;
+    html+=`<button class="btn-sm btn-out" style="flex:0 0 auto" onclick="event.stopPropagation();archiveRoutine('${r.id}')" title="Archivar">📦</button>`;
+    html+=`</div>`;
+  }
+  html+=`</div>`;
+  return html;
+}
+
+// ══ ROUTINE EDITOR (metadatos · editor de bloques en 4.5) ══
+function openRoutineEditor(routineId){
+  if(routineId){
+    editingRoutine=allRoutines.find(r=>r.id===routineId);
+    if(!editingRoutine){toast('Rutina no encontrada','error');return;}
+    editingRoutineState={
+      id:editingRoutine.id,
+      athlete_id:editingRoutine.athlete_id,
+      name:editingRoutine.name||'',
+      start_date:editingRoutine.start_date||'',
+      frequency_per_week:editingRoutine.frequency_per_week||null,
+      assigned_days:[...(editingRoutine.assigned_days||[])],
+      phase:editingRoutine.phase||'',
+      coach_notes:editingRoutine.coach_notes||'',
+      days:editingRoutine.days||[]
+    };
+    $("rted-title").textContent='Editar rutina';
+    $("rted-display-id").textContent=editingRoutine.display_id||'';
+  } else {
+    if(!currentAthleteId){toast('Sin alumno seleccionado','error');return;}
+    editingRoutine=null;
+    editingRoutineState={
+      id:null,
+      athlete_id:currentAthleteId,
+      name:'',
+      start_date:new Date().toISOString().slice(0,10),
+      frequency_per_week:3,
+      assigned_days:[],
+      phase:'',
+      coach_notes:'',
+      days:[]
+    };
+    $("rted-title").textContent='Nueva rutina';
+    $("rted-display-id").textContent='Se generará al guardar (JF-AAAA-MM-NNN)';
+  }
+  renderRoutineEditor();
+  showPage('pg-edit-routine');
+}
+
+function renderRoutineEditor(){
+  const s=editingRoutineState;
+  $("rted-name").value=s.name;
+  $("rted-startdate").value=s.start_date;
+  $("rted-freq").value=s.frequency_per_week||'';
+  $("rted-coachnotes").value=s.coach_notes;
+  renderAssignedDays();
+  document.querySelectorAll('[data-phase]').forEach(b=>b.classList.toggle('active',b.dataset.phase===s.phase));
+  $("rted-actions").style.display=editingRoutine?'block':'none';
+  $("rted-day-count").textContent=`${(s.days||[]).length} día${(s.days||[]).length===1?'':'s'} configurado${(s.days||[]).length===1?'':'s'}`;
+  $("rted-name").oninput=e=>{s.name=e.target.value;updateRtSaveBtn();};
+  $("rted-startdate").oninput=e=>{s.start_date=e.target.value;};
+  $("rted-freq").oninput=e=>{const n=parseInt(e.target.value);s.frequency_per_week=isNaN(n)?null:Math.max(1,Math.min(7,n));};
+  $("rted-coachnotes").oninput=e=>{s.coach_notes=e.target.value;};
+  updateRtSaveBtn();
+}
+
+function renderAssignedDays(){
+  const c=$("rted-days");
+  const selected=new Set(editingRoutineState.assigned_days||[]);
+  c.innerHTML=WEEK_DAYS.map(d=>{
+    const active=selected.has(d.key);
+    return `<button class="day-pill${active?' active':''}" onclick="toggleAssignedDay('${d.key}')" title="${d.name}">${d.label}</button>`;
+  }).join('');
+}
+
+function toggleAssignedDay(key){
+  const s=editingRoutineState;
+  s.assigned_days=s.assigned_days||[];
+  const i=s.assigned_days.indexOf(key);
+  if(i>=0) s.assigned_days.splice(i,1);
+  else s.assigned_days.push(key);
+  renderAssignedDays();
+}
+
+function setRoutinePhase(p){
+  editingRoutineState.phase=editingRoutineState.phase===p?'':p;
+  document.querySelectorAll('[data-phase]').forEach(b=>b.classList.toggle('active',b.dataset.phase===editingRoutineState.phase));
+}
+
+function updateRtSaveBtn(){$("btn-save-rt").disabled=!editingRoutineState.name.trim();}
+
+async function saveRoutine(){
+  const s=editingRoutineState;
+  if(!s.name.trim()) return toast('Falta el nombre','error');
+  const payload={
+    athlete_id:s.athlete_id,
+    coach_id:coachProfile.id,
+    name:s.name.trim(),
+    start_date:s.start_date||null,
+    frequency_per_week:s.frequency_per_week,
+    assigned_days:s.assigned_days&&s.assigned_days.length?s.assigned_days:null,
+    phase:s.phase||null,
+    coach_notes:s.coach_notes.trim()||null,
+    days:s.days||[]
+  };
+  const btn=$("btn-save-rt");btn.disabled=true;btn.innerHTML='<span class="spinner"></span>';
+  let res;
+  if(editingRoutine){
+    res=await sb.from('routines').update(payload).eq('id',editingRoutine.id);
+  } else {
+    payload.status='active';
+    // Si ya existe rutina activa para este alumno, archivarla primero
+    const oldActive=allRoutines.find(r=>r.status==='active');
+    if(oldActive){
+      const arch=await sb.from('routines').update({status:'archived',archived_at:new Date().toISOString()}).eq('id',oldActive.id);
+      if(arch.error){btn.disabled=false;btn.textContent='Guardar';toast(arch.error.message,'error');return;}
+      payload.previous_routine_id=oldActive.id;
+    }
+    res=await sb.from('routines').insert(payload);
+  }
+  btn.disabled=false;btn.textContent='Guardar';
+  if(res.error){toast(res.error.message,'error');return;}
+  toast(editingRoutine?'Rutina actualizada':'Rutina creada','success');
+  await loadAthleteRoutines(currentAthleteId);
+  closeRoutineEditor();
+}
+
+async function deleteRoutine(){
+  if(!editingRoutine) return;
+  if(!confirm(`¿Eliminar rutina "${editingRoutine.name}"?\n\nEsta acción no se puede deshacer.`)) return;
+  const {error}=await sb.from('routines').delete().eq('id',editingRoutine.id);
+  if(error){toast(error.message,'error');return;}
+  toast('Rutina eliminada','success');
+  await loadAthleteRoutines(currentAthleteId);
+  closeRoutineEditor();
+}
+
+async function archiveRoutine(routineId){
+  if(!confirm('¿Archivar esta rutina?\n\nNo se borra; queda en el histórico.')) return;
+  const {error}=await sb.from('routines').update({status:'archived',archived_at:new Date().toISOString()}).eq('id',routineId);
+  if(error){toast(error.message,'error');return;}
+  toast('Archivada','success');
+  await loadAthleteRoutines(currentAthleteId);
+}
+
+function closeRoutineEditor(){editingRoutine=null;editingRoutineState=null;showPage('pg-athlete-detail');}
+
+function showRoutineQR(routineId){toast('Generador de QR — etapa 4.6','');}
+
+// Cuando se guarda un alumno desde el editor, si veníamos del detalle, volvemos al detalle
+const _origCloseAthEditor=closeAthleteEditor;
+closeAthleteEditor=function(){
+  if(currentAthleteId&&editingAthlete&&editingAthlete.id===currentAthleteId){
+    // Veníamos del detalle, refrescamos el detalle del mismo alumno
+    editingAthlete=null;editingAthleteState=null;
+    openAthleteDetail(currentAthleteId);
+  } else {
+    _origCloseAthEditor();
+  }
+};
 
 // ══ INIT ══
 checkAuthOnLoad();
