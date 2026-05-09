@@ -214,7 +214,6 @@ body.modal-open{overflow:hidden;touch-action:none;}
       <span class="pill active" data-filter="all" onclick="setFilter('all')">Todos</span>
       <span class="pill" data-filter="compound" onclick="setFilter('compound')">Compuestos</span>
       <span class="pill" data-filter="aislacion" onclick="setFilter('aislacion')">Aislación</span>
-      <span class="pill" data-filter="custom" onclick="setFilter('custom')">Mis custom</span>
     </div>
 
     <div id="ex-count" class="text-xs text-mt mb-12"></div>
@@ -250,10 +249,6 @@ body.modal-open{overflow:hidden;touch-action:none;}
       <button class="btn-back" onclick="closeEditor()">←</button>
       <div class="editor-title" id="editor-title">Nuevo ejercicio</div>
       <button id="btn-save-ex" class="btn-save" onclick="saveExercise()">Guardar</button>
-    </div>
-
-    <div id="readonly-banner" style="display:none;background:rgba(138,132,120,0.15);border:1px solid var(--bd);border-radius:10px;padding:10px 14px;margin-bottom:16px;font-size:13px;color:var(--mt)">
-      🔒 Solo lectura · Este ejercicio fue creado por otro coach
     </div>
 
     <div class="mb-16">
@@ -315,15 +310,6 @@ body.modal-open{overflow:hidden;touch-action:none;}
       <label class="label">Cues / instrucciones</label>
       <textarea id="ed-cues" class="input" placeholder="Ej: Escápulas juntas, arco lumbar natural..." maxlength="280"></textarea>
       <div class="text-xs text-mt mt-4 center"><span id="cues-count">0</span>/280</div>
-    </div>
-
-    <div id="admin-controls" class="sec" style="display:none">
-      <label class="label">Visibilidad</label>
-      <div class="radio-group">
-        <button class="radio-btn" data-scope="custom-coach" onclick="setEditorScope('custom-coach')">Mi custom</button>
-        <button class="radio-btn" data-scope="official" onclick="setEditorScope('official')">Oficial (todos los profes)</button>
-      </div>
-      <div class="text-xs text-mt mt-8">Como admin podés crear ejercicios oficiales que ven todos los profes y todos los atletas.</div>
     </div>
 
     <div class="sec flex gap-8" id="editor-actions">
@@ -435,19 +421,12 @@ async function loadExercises(){
   renderList();
 }
 function setFilter(f){currentFilter=f;document.querySelectorAll('.pill').forEach(p=>p.classList.toggle('active',p.dataset.filter===f));renderList();}
-function canEdit(ex){
-  if(!ex)return true;
-  if(ex.scope==='official')return true; // opción C: todos los coaches editan oficiales
-  // custom-coach: solo el creador
-  return ex.created_by===coachProfile?.id;
-}
+function canEdit(ex){return true;} // todos los coaches autenticados editan todo
 function renderList(){
   const search=normalizeText($("search-input").value);
   let items=allExercises.filter(ex=>{
     if(currentFilter==='compound'&&ex.category!=='compound')return false;
     if(currentFilter==='aislacion'&&ex.category!=='aislacion')return false;
-    if(currentFilter==='custom'&&ex.scope!=='custom-coach')return false;
-    if(currentFilter==='custom'&&ex.created_by!==coachProfile?.id)return false;
     if(search){
       const hay=normalizeText(ex.name+' '+(ex.aliases||[]).join(' '));
       if(!hay.includes(search))return false;
@@ -458,12 +437,7 @@ function renderList(){
   if(!items.length){$("ex-list").innerHTML='<div class="text-sm text-mt center" style="padding:40px 0">Sin resultados</div>';return;}
   $("ex-list").innerHTML=items.map(ex=>{
     const muscles=Object.keys(ex.muscle_activation||{}).slice(0,3).map(m=>MUSCLE_LABELS[m]||m).join(' · ');
-    const editable=canEdit(ex);
-    let badge='';
-    if(ex.scope==='official') badge='<span class="badge badge-official">OFICIAL</span>';
-    else if(ex.created_by===coachProfile?.id) badge='<span class="badge badge-custom">MI CUSTOM</span>';
-    else badge='<span class="badge badge-readonly">🔒 OTRO COACH</span>';
-    return `<div class="ex-card" onclick="openExerciseEditor('${ex.id}')"><div class="ex-info"><div class="ex-name">${ex.name}</div><div class="ex-meta">${muscles||'—'}</div></div><div class="ex-badges">${badge}<span class="text-xs text-mt mono">${ex.category||''}</span></div></div>`;
+    return `<div class="ex-card" onclick="openExerciseEditor('${ex.id}')"><div class="ex-info"><div class="ex-name">${ex.name}</div><div class="ex-meta">${muscles||'—'}</div></div><div class="ex-badges"><span class="text-xs text-mt mono">${ex.category||''}</span></div></div>`;
   }).join('');
 }
 
@@ -495,42 +469,27 @@ function openExerciseEditor(id){
 }
 function closeEditor(){editingExercise=null;editorState=null;navTo('pg-main');}
 function renderEditor(){
-  const editable=canEdit(editingExercise);
-  // Banner readonly
-  $("readonly-banner").style.display=editable?'none':'block';
-  $("btn-save-ex").style.display=editable?'':'none';
   // Inputs
-  $("ed-name").value=editorState.name;$("ed-name").disabled=!editable;
-  $("ed-equipment").value=editorState.equipment;$("ed-equipment").disabled=!editable;
-  $("ed-movement").value=editorState.movement;$("ed-movement").disabled=!editable;
-  $("ed-cues").value=editorState.cues;$("ed-cues").disabled=!editable;
+  $("ed-name").value=editorState.name;
+  $("ed-equipment").value=editorState.equipment;
+  $("ed-movement").value=editorState.movement;
+  $("ed-cues").value=editorState.cues;
   $("cues-count").textContent=editorState.cues.length;
   // Categoría radio
-  document.querySelectorAll('[data-cat]').forEach(b=>{b.classList.toggle('active',b.dataset.cat===editorState.category);b.disabled=!editable;});
-  // Aliases
-  renderAliases(editable);
-  // Similares
-  renderSimilar(editable);
-  // Música
-  renderMuscleEditor(editable);
-  // Admin scope toggle
-  if(coachProfile?.role==='admin'){
-    $("admin-controls").style.display='block';
-    document.querySelectorAll('[data-scope]').forEach(b=>{b.classList.toggle('active',b.dataset.scope===editorState.scope);b.disabled=!editable;});
-  } else {
-    $("admin-controls").style.display='none';
-  }
-  // Eliminar/duplicar
+  document.querySelectorAll('[data-cat]').forEach(b=>b.classList.toggle('active',b.dataset.cat===editorState.category));
+  // Aliases / Similar / Músculos
+  renderAliases(true);
+  renderSimilar(true);
+  renderMuscleEditor(true);
+  // Eliminar/duplicar visibles solo si estoy editando un existente
   $("editor-actions").style.display=editingExercise?'flex':'none';
-  $("btn-del-ex").disabled=!editable;
-  // Listener cues count
+  // Listeners
   $("ed-cues").oninput=e=>{editorState.cues=e.target.value;$("cues-count").textContent=e.target.value.length;};
   $("ed-name").oninput=e=>{editorState.name=e.target.value;};
   $("ed-equipment").oninput=e=>{editorState.equipment=e.target.value;};
   $("ed-movement").onchange=e=>{editorState.movement=e.target.value;};
 }
-function setEditorCategory(c){if(!canEdit(editingExercise))return;editorState.category=c;document.querySelectorAll('[data-cat]').forEach(b=>b.classList.toggle('active',b.dataset.cat===c));}
-function setEditorScope(s){if(!canEdit(editingExercise))return;editorState.scope=s;document.querySelectorAll('[data-scope]').forEach(b=>b.classList.toggle('active',b.dataset.scope===s));}
+function setEditorCategory(c){editorState.category=c;document.querySelectorAll('[data-cat]').forEach(b=>b.classList.toggle('active',b.dataset.cat===c));}
 
 // ALIASES (chips)
 function renderAliases(editable){
@@ -590,8 +549,7 @@ function renderMuscleEditor(editable){
   }).join('');
   // Botón + agregar
   const total=muscleTotal();
-  $("btn-add-muscle").disabled=!editable||editorState.muscleActivation.length>=MAX_MUSCLES;
-  $("btn-add-muscle").style.display=editable?'block':'none';
+  $("btn-add-muscle").disabled=editorState.muscleActivation.length>=MAX_MUSCLES;
   $("btn-add-muscle").textContent=editorState.muscleActivation.length>=MAX_MUSCLES?`Máximo ${MAX_MUSCLES} músculos`:'+ Agregar músculo';
   // Total
   const tEl=$("muscle-total");
@@ -601,7 +559,7 @@ function renderMuscleEditor(editable){
   else if(total<100) tEl.classList.add('warn');
   else tEl.classList.add('over');
   // Validation visual del save
-  $("btn-save-ex").disabled=!editable||total!==100||!editorState.name.trim()||editorState.muscleActivation.length===0;
+  $("btn-save-ex").disabled=total!==100||!editorState.name.trim()||editorState.muscleActivation.length===0;
 }
 function muscleTotal(){return editorState.muscleActivation.reduce((s,m)=>s+(parseFloat(m.pct)||0),0);}
 function onMusclePctChange(i,v){
@@ -612,7 +570,6 @@ function onMusclePctChange(i,v){
 }
 function removeMuscle(i){editorState.muscleActivation.splice(i,1);renderMuscleEditor(canEdit(editingExercise));}
 function balanceMuscles(){
-  if(!canEdit(editingExercise))return;
   const n=editorState.muscleActivation.length;
   if(n===0)return;
   const each=Math.floor(100/n);
@@ -621,7 +578,6 @@ function balanceMuscles(){
   renderMuscleEditor(true);
 }
 function autoComplete100(){
-  if(!canEdit(editingExercise))return;
   if(!editorState.muscleActivation.length)return;
   const sum=muscleTotal();
   const last=editorState.muscleActivation[editorState.muscleActivation.length-1];
@@ -683,7 +639,7 @@ async function saveExercise(){
     muscle_activation,
     similar_ids:editorState.similar_ids,
     cues:editorState.cues.trim()||null,
-    scope:editorState.scope,
+    scope:'official',
     updated_by:coachProfile?.id||null
   };
 
@@ -703,7 +659,6 @@ async function saveExercise(){
 }
 async function deleteExercise(){
   if(!editingExercise)return;
-  if(!canEdit(editingExercise))return;
   if(!confirm(`¿Eliminar "${editingExercise.name}"?\n\nEsta acción no se puede deshacer.`))return;
   const {error}=await sb.from('exercises').delete().eq('id',editingExercise.id);
   if(error){toast(error.message,'error');return;}
@@ -716,7 +671,6 @@ function duplicateExercise(){
   // Copia el state actual pero como nuevo
   editorState.id=null;
   editorState.name=editorState.name+' (copia)';
-  editorState.scope='custom-coach';
   editingExercise=null;
   $("editor-title").textContent='Nuevo ejercicio (copia)';
   renderEditor();
