@@ -1671,10 +1671,10 @@ function renderBexRowHTML(ex,bi,ei,gi){
   const meta=metaParts.join(' · ');
   const exs=editingDayState.blocks[bi].exercises;
   const s=v=>(v!=null&&v!==undefined)?String(v):'';
-  // Visual de grupo (superset)
+  // Visual de grupo (biserie/triserie)
   const inGroup=gi&&gi.groupId;
   const groupBorder=inGroup?'border-left:3px solid #eab308;':'';
-  const groupBadge=(inGroup&&gi.isFirst)?`<div style="font-size:10px;font-weight:800;color:#a16207;letter-spacing:.5px;margin-bottom:6px;text-transform:uppercase">🔗 ${gi.groupSize===2?'Superset':gi.groupSize===3?'Triserie':'Grupo'} ×${gi.groupSize}</div>`:'';
+  const groupBadge=(inGroup&&gi.isFirst)?`<div style="font-size:10px;font-weight:800;color:#a16207;letter-spacing:.5px;margin-bottom:6px;text-transform:uppercase">🔗 ${groupTerm(gi.groupSize)}</div>`:'';
   // Si está en grupo pero no es el primero, sumá una etiqueta sutil "+ del superset"
   const groupContinuation=(inGroup&&!gi.isFirst)?`<span class="text-xs" style="color:#a16207;font-weight:700;margin-left:6px">+${gi.groupIndex+1}</span>`:'';
   let html=`<div class="bex-row" style="${groupBorder}">
@@ -1729,22 +1729,44 @@ function renderBexRowHTML(ex,bi,ei,gi){
   return html;
 }
 
+// Nombre del grupo según tamaño
+function groupTerm(size){
+  if(size===2) return 'Biserie';
+  if(size===3) return 'Triserie';
+  if(size>=4) return 'Grupo ×'+size;
+  return 'Grupo';
+}
+
 function renderGroupActionHTML(bi,ei,gi){
   const exs=editingDayState.blocks[bi].exercises;
   const inGroup=gi&&gi.groupId;
   const hasNext=ei<exs.length-1;
-  if(inGroup){
-    return `<div class="mt-12" style="padding-top:10px;border-top:1px dashed var(--bd)">
-      <button class="btn-sm btn-out" onclick="ungroupExercise(${bi},${ei})" style="width:100%;font-size:12px;color:#a16207;border-color:#eab308">🔗 Sacar del superset</button>
-    </div>`;
+  const nextEx=hasNext?exs[ei+1]:null;
+  const nextInSameGroup=inGroup&&nextEx&&nextEx.groupId===gi.groupId;
+  let html=`<div class="mt-12" style="padding-top:10px;border-top:1px dashed var(--bd);display:flex;flex-direction:column;gap:8px">`;
+  let renderedAny=false;
+  // Botón para sumar el siguiente al grupo (o crear nuevo grupo)
+  if(hasNext&&!nextInSameGroup){
+    const nextLibEx=nextEx.exerciseId?allExercises.find(e=>e.id===nextEx.exerciseId):null;
+    const nextName=nextLibEx?nextLibEx.name:(nextEx.customName||'siguiente');
+    let label;
+    if(!inGroup){
+      label=`🔗 Hacer biserie con: ${nextName}`;
+    } else if(gi.groupSize===2){
+      label=`🔗 Sumar a triserie: ${nextName}`;
+    } else {
+      label=`🔗 Sumar al grupo: ${nextName}`;
+    }
+    html+=`<button class="btn-sm btn-out" onclick="groupWithNext(${bi},${ei})" style="width:100%;font-size:12px">${label}</button>`;
+    renderedAny=true;
   }
-  if(!hasNext) return ''; // no hay siguiente para agrupar
-  const nextEx=exs[ei+1];
-  const nextLibEx=nextEx.exerciseId?allExercises.find(e=>e.id===nextEx.exerciseId):null;
-  const nextName=nextLibEx?nextLibEx.name:(nextEx.customName||'siguiente');
-  return `<div class="mt-12" style="padding-top:10px;border-top:1px dashed var(--bd)">
-    <button class="btn-sm btn-out" onclick="groupWithNext(${bi},${ei})" style="width:100%;font-size:12px">🔗 Hacer superset con: ${nextName}</button>
-  </div>`;
+  if(inGroup){
+    const term=gi.groupSize===2?'biserie':gi.groupSize===3?'triserie':'grupo';
+    html+=`<button class="btn-sm btn-out" onclick="ungroupExercise(${bi},${ei})" style="width:100%;font-size:12px;color:#a16207;border-color:#eab308">🔗 Sacar de la ${term}</button>`;
+    renderedAny=true;
+  }
+  html+=`</div>`;
+  return renderedAny?html:'';
 }
 
 function groupWithNext(bi,ei){
