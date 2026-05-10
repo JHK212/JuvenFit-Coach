@@ -1603,6 +1603,35 @@ function renderDayEditor(){
   drawDayMuscleChart();
 }
 
+// Calcula info de grupos del bloque: por cada índice ei devuelve {groupId, groupSize, isFirst, isLast, groupIndex}
+function computeBlockGroups(exs){
+  const result=exs.map(()=>({groupId:null,groupSize:1,isFirst:false,isLast:false,groupIndex:0}));
+  if(!exs||!exs.length) return result;
+  let i=0;
+  while(i<exs.length){
+    const gid=exs[i].groupId;
+    if(!gid){i++;continue;}
+    // Encontrar todos los consecutivos con mismo groupId (debe ser grupo contiguo)
+    let j=i;
+    const indexes=[];
+    while(j<exs.length&&exs[j].groupId===gid){indexes.push(j);j++;}
+    if(indexes.length<2){
+      // Singleton — limpiar el groupId huérfano (defensivo, no debería pasar)
+      result[i].groupId=null;
+      i++;continue;
+    }
+    indexes.forEach((idx,k)=>{
+      result[idx].groupId=gid;
+      result[idx].groupSize=indexes.length;
+      result[idx].isFirst=(k===0);
+      result[idx].isLast=(k===indexes.length-1);
+      result[idx].groupIndex=k;
+    });
+    i=j;
+  }
+  return result;
+}
+
 function renderBlockHTML(b,bi){
   const bt=BLOCK_TYPES[b.type]||BLOCK_TYPES.custom;
   const color=bt.color;
@@ -1610,6 +1639,7 @@ function renderBlockHTML(b,bi){
   const blocks=editingDayState.blocks;
   const exs=b.exercises||[];
   const isCustom=b.type==='custom';
+  const groupInfo=computeBlockGroups(exs);
   let html=`<div class="block-wrap">
     <div class="block-hd">
       <span class="block-tag" style="background:${color};${isCustom?'cursor:pointer':''}" ${isCustom?`onclick="renameBlockLabel(${bi})" title="Tap para renombrar"`:''}>${label}${isCustom?' ✎':''}</span>
@@ -1619,7 +1649,7 @@ function renderBlockHTML(b,bi){
       <span class="micro-btn" style="color:var(--dn)" onclick="removeBlock(${bi})">✕</span>
     </div>`;
   if(exs.length){
-    html+=exs.map((ex,ei)=>renderBexRowHTML(ex,bi,ei)).join('');
+    html+=exs.map((ex,ei)=>renderBexRowHTML(ex,bi,ei,groupInfo[ei])).join('');
   } else {
     html+=`<div class="text-xs text-mt center" style="padding:8px 0">Sin ejercicios</div>`;
   }
@@ -1628,7 +1658,7 @@ function renderBlockHTML(b,bi){
   return html;
 }
 
-function renderBexRowHTML(ex,bi,ei){
+function renderBexRowHTML(ex,bi,ei,gi){
   const libEx=ex.exerciseId?allExercises.find(e=>e.id===ex.exerciseId):null;
   const isCustom=!ex.exerciseId&&!!ex.customName;
   const name=libEx?libEx.name:(ex.customName||ex.exerciseId||'Ejercicio');
@@ -1641,9 +1671,16 @@ function renderBexRowHTML(ex,bi,ei){
   const meta=metaParts.join(' · ');
   const exs=editingDayState.blocks[bi].exercises;
   const s=v=>(v!=null&&v!==undefined)?String(v):'';
-  let html=`<div class="bex-row">
+  // Visual de grupo (superset)
+  const inGroup=gi&&gi.groupId;
+  const groupBorder=inGroup?'border-left:3px solid #eab308;':'';
+  const groupBadge=(inGroup&&gi.isFirst)?`<div style="font-size:10px;font-weight:800;color:#a16207;letter-spacing:.5px;margin-bottom:6px;text-transform:uppercase">🔗 ${gi.groupSize===2?'Superset':gi.groupSize===3?'Triserie':'Grupo'} ×${gi.groupSize}</div>`:'';
+  // Si está en grupo pero no es el primero, sumá una etiqueta sutil "+ del superset"
+  const groupContinuation=(inGroup&&!gi.isFirst)?`<span class="text-xs" style="color:#a16207;font-weight:700;margin-left:6px">+${gi.groupIndex+1}</span>`:'';
+  let html=`<div class="bex-row" style="${groupBorder}">
+    ${groupBadge}
     <div class="bex-top">
-      <span class="bex-name" id="bex-name-${bi}-${ei}" onclick="toggleExExpand(${bi},${ei})">${name}${isCustom?' <span class="badge badge-custom" style="margin-left:6px">custom</span>':''}</span>
+      <span class="bex-name" id="bex-name-${bi}-${ei}" onclick="toggleExExpand(${bi},${ei})">${name}${groupContinuation}${isCustom?' <span class="badge badge-custom" style="margin-left:6px">custom</span>':''}</span>
       ${ei>0?`<span class="micro-btn" onclick="moveExercise(${bi},${ei},-1)">↑</span>`:''}
       ${ei<exs.length-1?`<span class="micro-btn" onclick="moveExercise(${bi},${ei},1)">↓</span>`:''}
       <span class="micro-btn" style="color:var(--dn)" onclick="removeExercise(${bi},${ei})">✕</span>
@@ -1685,10 +1722,78 @@ function renderBexRowHTML(ex,bi,ei){
         <span class="xfl-lbl" style="padding-top:8px">Notas</span>
         <textarea class="xfl-inp" rows="2" placeholder="Cues, variantes..." oninput="upEx(${bi},${ei},'notes',this.value)">${s(ex.notes)}</textarea>
       </div>
+      ${renderGroupActionHTML(bi,ei,gi)}
     </div>`;
   }
   html+=`</div>`;
   return html;
+}
+
+function renderGroupActionHTML(bi,ei,gi){
+  const exs=editingDayState.blocks[bi].exercises;
+  const inGroup=gi&&gi.groupId;
+  const hasNext=ei<exs.length-1;
+  if(inGroup){
+    return `<div class="mt-12" style="padding-top:10px;border-top:1px dashed var(--bd)">
+      <button class="btn-sm btn-out" onclick="ungroupExercise(${bi},${ei})" style="width:100%;font-size:12px;color:#a16207;border-color:#eab308">🔗 Sacar del superset</button>
+    </div>`;
+  }
+  if(!hasNext) return ''; // no hay siguiente para agrupar
+  const nextEx=exs[ei+1];
+  const nextLibEx=nextEx.exerciseId?allExercises.find(e=>e.id===nextEx.exerciseId):null;
+  const nextName=nextLibEx?nextLibEx.name:(nextEx.customName||'siguiente');
+  return `<div class="mt-12" style="padding-top:10px;border-top:1px dashed var(--bd)">
+    <button class="btn-sm btn-out" onclick="groupWithNext(${bi},${ei})" style="width:100%;font-size:12px">🔗 Hacer superset con: ${nextName}</button>
+  </div>`;
+}
+
+function groupWithNext(bi,ei){
+  const exs=editingDayState.blocks[bi].exercises;
+  if(ei>=exs.length-1) return;
+  const cur=exs[ei], nxt=exs[ei+1];
+  // Si el siguiente ya tiene grupo, extendemos ese; sino generamos uno nuevo
+  const gid=nxt.groupId||cur.groupId||('g'+uid());
+  cur.groupId=gid;
+  nxt.groupId=gid;
+  cleanupSingletonGroups(bi);
+  renderDayEditor();
+}
+
+function ungroupExercise(bi,ei){
+  const exs=editingDayState.blocks[bi].exercises;
+  delete exs[ei].groupId;
+  cleanupSingletonGroups(bi);
+  renderDayEditor();
+}
+
+function cleanupSingletonGroups(bi){
+  // Si un groupId queda con un solo miembro, lo quitamos (ya no es grupo)
+  const exs=editingDayState.blocks[bi].exercises;
+  const counts={};
+  exs.forEach(ex=>{if(ex.groupId) counts[ex.groupId]=(counts[ex.groupId]||0)+1;});
+  exs.forEach(ex=>{if(ex.groupId&&counts[ex.groupId]<2) delete ex.groupId;});
+  // Validación adicional: el grupo debe ser contiguo. Si no, dispersamos los huérfanos.
+  // (el coach no debería poder romper la contigüidad porque al mover ejercicios
+  // arrastra el grupo entero — pero por seguridad)
+  let i=0;
+  while(i<exs.length){
+    const gid=exs[i].groupId;
+    if(!gid){i++;continue;}
+    let j=i;
+    while(j<exs.length&&exs[j].groupId===gid) j++;
+    // De acá en adelante hasta fin de array, no debería haber otro con mismo gid
+    for(let k=j;k<exs.length;k++){
+      if(exs[k].groupId===gid){
+        // grupo no-contiguo → quitamos los más allá
+        delete exs[k].groupId;
+      }
+    }
+    i=j;
+  }
+  // Re-aplicar singleton check después de la limpieza de no-contiguos
+  const counts2={};
+  exs.forEach(ex=>{if(ex.groupId) counts2[ex.groupId]=(counts2[ex.groupId]||0)+1;});
+  exs.forEach(ex=>{if(ex.groupId&&counts2[ex.groupId]<2) delete ex.groupId;});
 }
 
 function toggleExExpand(bi,ei){
