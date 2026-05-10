@@ -11,6 +11,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;600;700;800&display=swap" rel="stylesheet">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="https://cdn.jsdelivr.net/npm/qrcode@1.5.4/build/qrcode.min.js"></script>
 <style>
 :root{
   --bg:#F5F2ED;--sf:#EDE9E3;--cd:#FFFFFF;--bd:#E0DBD3;
@@ -1394,7 +1395,87 @@ async function archiveRoutine(routineId){
 
 function closeRoutineEditor(){editingRoutine=null;editingRoutineState=null;showPage('pg-athlete-detail');}
 
-function showRoutineQR(routineId){toast('Generador de QR — etapa 4.6','');}
+// ══ QR SHARING (4.6) ══
+// Genera o reusa un token de 8 chars hex, lo persiste en Supabase con expiración 7d, y muestra QR + código.
+function generateQrToken(){
+  // 8 chars hex (4 bytes) → 4.3B combinaciones, suficiente para 7 días
+  const arr=new Uint8Array(4);
+  (window.crypto||window.msCrypto).getRandomValues(arr);
+  return Array.from(arr).map(b=>b.toString(16).padStart(2,'0')).join('').toUpperCase();
+}
+function formatQrToken(t){return t?t.replace(/(.{4})/g,'$1-').replace(/-$/,''):'';}
+
+async function showRoutineQR(routineId){
+  const r=allRoutines.find(x=>x.id===routineId);
+  if(!r){toast('Rutina no encontrada','error');return;}
+  // Modal de carga
+  $("modal-content").innerHTML=`<div class="center" style="padding:40px 0"><span class="spinner"></span><div class="text-sm text-mt mt-12">Generando código...</div></div>`;
+  $("modal").classList.add('show');
+  // Reusar token si existe y no expiró; sino generar uno nuevo
+  let token=r.qr_token;
+  let expiresAt=r.qr_expires_at?new Date(r.qr_expires_at):null;
+  const now=new Date();
+  const expired=!expiresAt||expiresAt<=now;
+  if(!token||expired){
+    token=generateQrToken();
+    const exp=new Date(now.getTime()+7*24*3600*1000); // 7 días
+    const {error}=await sb.from('routines').update({qr_token:token,qr_expires_at:exp.toISOString()}).eq('id',routineId);
+    if(error){closeModal();toast('Error: '+error.message,'error');return;}
+    r.qr_token=token;r.qr_expires_at=exp.toISOString();expiresAt=exp;
+  }
+  renderQrModal(r,token,expiresAt);
+}
+
+function renderQrModal(r,token,expiresAt){
+  const formatted=formatQrToken(token);
+  const daysLeft=Math.max(0,Math.ceil((expiresAt-new Date())/(24*3600*1000)));
+  let html=`<div class="fw-800 mb-4" style="font-size:18px">Compartir rutina</div>`;
+  html+=`<div class="text-sm text-mt mb-16">${r.name}</div>`;
+  // QR canvas
+  html+=`<div id="qr-wrap" class="card" style="padding:20px;display:flex;justify-content:center;background:#fff;cursor:default"><canvas id="qr-canvas"></canvas></div>`;
+  // Código texto
+  html+=`<div class="card mt-12" style="cursor:default;text-align:center;padding:14px 16px"><div class="text-xs text-mt fw-700 mb-4" style="letter-spacing:.5px">CÓDIGO</div><div class="mono fw-800" style="font-size:22px;letter-spacing:2px;color:var(--ac)">${formatted}</div><button class="btn-sm mt-12" onclick="copyToClipboard('${token}',this)">📋 Copiar</button></div>`;
+  // Info
+  html+=`<div class="text-xs text-mt mt-12 center">Vence en ${daysLeft} día${daysLeft===1?'':'s'} · El alumno puede escanear el QR o pegar el código en su app.</div>`;
+  // Acciones
+  html+=`<div class="flex gap-8 mt-16"><button class="btn-out" style="flex:1" onclick="regenerateQrToken('${r.id}')">🔄 Regenerar</button><button class="btn" style="flex:1" onclick="closeModal()">Listo</button></div>`;
+  $("modal-content").innerHTML=html;
+  // Render QR — codifica URL completa de la PWA atleta para que cámara nativa abra link directo.
+  // Si la app no está instalada como PWA, abre la web en mismo dominio. Si está instalada, abre PWA (en Android).
+  const trackerUrl=`https://jhk212.github.io/JuvenFit-Tracker/?import=${token}`;
+  const canvas=$("qr-canvas");
+  if(window.QRCode&&canvas){
+    QRCode.toCanvas(canvas,trackerUrl,{width:240,margin:1,color:{dark:'#1a1a1a',light:'#ffffff'}},err=>{
+      if(err) console.warn('QR render error:',err);
+    });
+  }
+}
+
+async function regenerateQrToken(routineId){
+  if(!confirm('Regenerar invalida el código actual. ¿Continuar?')) return;
+  const r=allRoutines.find(x=>x.id===routineId);
+  if(!r) return;
+  const token=generateQrToken();
+  const exp=new Date(Date.now()+7*24*3600*1000);
+  $("modal-content").innerHTML=`<div class="center" style="padding:40px 0"><span class="spinner"></span></div>`;
+  const {error}=await sb.from('routines').update({qr_token:token,qr_expires_at:exp.toISOString()}).eq('id',routineId);
+  if(error){toast(error.message,'error');closeModal();return;}
+  r.qr_token=token;r.qr_expires_at=exp.toISOString();
+  renderQrModal(r,token,exp);
+  toast('Código regenerado','success');
+}
+
+function copyToClipboard(text,btn){
+  if(navigator.clipboard){
+    navigator.clipboard.writeText(text).then(()=>{
+      const original=btn.textContent;
+      btn.textContent='✓ Copiado';
+      setTimeout(()=>{btn.textContent=original;},1500);
+    }).catch(()=>toast('No se pudo copiar','error'));
+  } else {
+    toast('Copia manual: '+text,'');
+  }
+}
 
 // ══ BLOCKS / DAY BUILDER (4.5) ══
 const BLOCK_TYPES={
