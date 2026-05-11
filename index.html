@@ -496,6 +496,16 @@ textarea.xfl-inp{resize:none;min-height:48px;font-size:14px;}
     </div>
 
     <div class="mb-16">
+      <label class="label">Cómo se mide</label>
+      <div class="radio-group">
+        <button class="radio-btn" data-track="weight" onclick="setEditorTrackMode('weight')">Peso × Reps</button>
+        <button class="radio-btn" data-track="reps" onclick="setEditorTrackMode('reps')">Solo reps</button>
+        <button class="radio-btn" data-track="time" onclick="setEditorTrackMode('time')">Tiempo</button>
+      </div>
+      <div class="text-xs text-mt mt-4">Peso×Reps: barra, mancuernas, máquinas. Solo reps: dominadas, flexiones. Tiempo: plancha, movilidades.</div>
+    </div>
+
+    <div class="mb-16">
       <label class="label">Patrón de movimiento</label>
       <select id="ed-movement" class="input">
         <option value="">— Elegir —</option>
@@ -771,12 +781,13 @@ function openExerciseEditor(id){
       muscleActivation:Object.entries(editingExercise.muscle_activation||{}).map(([m,p])=>({muscle:m,pct:p})),
       similar_ids:[...(editingExercise.similar_ids||[])],
       cues:editingExercise.cues||'',
-      scope:editingExercise.scope||'custom-coach'
+      scope:editingExercise.scope||'custom-coach',
+      track_mode:editingExercise.track_mode||'weight'
     };
     $("editor-title").textContent='Editar ejercicio';
   } else {
     editingExercise=null;
-    editorState={id:null,name:'',aliases:[],category:'compound',movement:'',equipment:'',muscleActivation:[],similar_ids:[],cues:'',scope:'custom-coach'};
+    editorState={id:null,name:'',aliases:[],category:'compound',movement:'',equipment:'',muscleActivation:[],similar_ids:[],cues:'',scope:'custom-coach',track_mode:'weight'};
     $("editor-title").textContent='Nuevo ejercicio';
   }
   renderEditor();
@@ -790,8 +801,9 @@ function renderEditor(){
   $("ed-movement").value=editorState.movement;
   $("ed-cues").value=editorState.cues;
   $("cues-count").textContent=editorState.cues.length;
-  // Categoría radio
+  // Categoría radio + track_mode radio
   document.querySelectorAll('[data-cat]').forEach(b=>b.classList.toggle('active',b.dataset.cat===editorState.category));
+  document.querySelectorAll('[data-track]').forEach(b=>b.classList.toggle('active',b.dataset.track===(editorState.track_mode||'weight')));
   applyMovilidadVisibility();
   // Aliases / Similar / Músculos
   renderAliases(true);
@@ -808,9 +820,15 @@ function renderEditor(){
 function setEditorCategory(c){
   editorState.category=c;
   document.querySelectorAll('[data-cat]').forEach(b=>b.classList.toggle('active',b.dataset.cat===c));
+  // Default razonable: movilidad casi siempre es 'time'
+  if(c==='movilidad'&&editorState.track_mode==='weight') setEditorTrackMode('time');
   applyMovilidadVisibility();
   // Re-evaluar el botón save (movilidad permite muscle vacío)
   if(typeof renderMuscleEditor==='function') renderMuscleEditor(true);
+}
+function setEditorTrackMode(m){
+  editorState.track_mode=m;
+  document.querySelectorAll('[data-track]').forEach(b=>b.classList.toggle('active',b.dataset.track===m));
 }
 function applyMovilidadVisibility(){
   const isMov=editorState&&editorState.category==='movilidad';
@@ -1000,6 +1018,7 @@ async function saveExercise(){
     similar_ids:editorState.similar_ids,
     cues:editorState.cues.trim()||null,
     scope:'official',
+    track_mode:editorState.track_mode||'weight',
     updated_by:coachProfile?.id||null
   };
 
@@ -2090,7 +2109,15 @@ function openExPickerForBlock(bi){
 function addExerciseToBlock(bi,exId){
   if(!editingDayState.blocks[bi].exercises) editingDayState.blocks[bi].exercises=[];
   const ei=editingDayState.blocks[bi].exercises.length;
-  editingDayState.blocks[bi].exercises.push({id:uid(),exerciseId:exId,sets:null,reps:'',rest:'',objective:'',notes:''});
+  // Defaults razonables según track_mode del ejercicio de la biblioteca
+  const lib=allExercises.find(e=>e.id===exId);
+  const mode=(lib&&lib.track_mode)||'weight';
+  const defaults={
+    weight:{sets:4,reps:'8-10',rest:'90 segs'},
+    reps:{sets:3,reps:'8-12',rest:'60 segs'},
+    time:{sets:3,reps:'30 segs',rest:'30 segs'}
+  }[mode];
+  editingDayState.blocks[bi].exercises.push({id:uid(),exerciseId:exId,sets:defaults.sets,reps:defaults.reps,rest:defaults.rest,objective:'',notes:''});
   closeModal();
   expandedEx={bi,ei};
   renderDayEditor();
