@@ -1041,7 +1041,8 @@ function duplicateExercise(){
 // ══ ATHLETES — LIST ══
 async function loadAthletes(){
   if(!coachProfile)return;
-  const {data,error}=await sb.from('athletes').select('*').eq('coach_id',coachProfile.id).order('name',{ascending:true});
+  // Todos los coaches autenticados ven todos los alumnos. coach_id queda como trazabilidad de quién lo creó.
+  const {data,error}=await sb.from('athletes').select('*, coach:coach_id(name)').order('name',{ascending:true});
   if(error){console.warn('loadAthletes error:',error.message);return;}
   allAthletes=data;
   renderAthleteList();
@@ -1061,7 +1062,10 @@ function renderAthleteList(){
   }
   list.innerHTML=filtered.map(a=>{
     const meta=[a.email,a.level&&(a.level.charAt(0).toUpperCase()+a.level.slice(1)),a.age?a.age+' años':null].filter(Boolean).join(' · ');
-    return `<div class="ex-card" onclick="openAthleteDetail('${a.id}')"><div class="ex-info"><div class="ex-name">${a.name}</div><div class="ex-meta">${meta||'—'}</div></div><div class="text-mt" style="font-size:18px;flex-shrink:0">→</div></div>`;
+    const byOther=a.coach_id&&coachProfile&&a.coach_id!==coachProfile.id;
+    const byName=a.coach&&a.coach.name?a.coach.name:'otro coach';
+    const ownerBadge=byOther?`<div class="text-xs text-mt mt-4" style="font-style:italic">👤 ${byName}</div>`:'';
+    return `<div class="ex-card" onclick="openAthleteDetail('${a.id}')"><div class="ex-info"><div class="ex-name">${a.name}</div><div class="ex-meta">${meta||'—'}</div>${ownerBadge}</div><div class="text-mt" style="font-size:18px;flex-shrink:0">→</div></div>`;
   }).join('');
 }
 
@@ -1258,7 +1262,8 @@ function editCurrentAthlete(){if(currentAthleteId) openAthleteEditor(currentAthl
 async function loadAthleteRoutines(athleteId){
   $("adet-active").innerHTML='<div class="text-sm text-mt center" style="padding:20px 0">Cargando...</div>';
   $("adet-archived").innerHTML='';
-  const {data,error}=await sb.from('routines').select('*').eq('athlete_id',athleteId).order('created_at',{ascending:false});
+  // Todas las rutinas del alumno, sin importar qué coach las creó.
+  const {data,error}=await sb.from('routines').select('*, coach:coach_id(name)').eq('athlete_id',athleteId).order('created_at',{ascending:false});
   if(error){$("adet-active").innerHTML=`<div class="text-sm text-dn">Error: ${error.message}</div>`;return;}
   allRoutines=data;
   renderRoutinesInDetail();
@@ -1293,12 +1298,15 @@ function routineCard(r,isActive){
   const dayCount=(r.days||[]).length;
   const phaseLabel=r.phase?PHASE_LABELS[r.phase]:null;
   const dateStr=r.start_date?formatDateShort(r.start_date):relativeTime(r.created_at);
+  const byOther=r.coach_id&&coachProfile&&r.coach_id!==coachProfile.id;
+  const byName=r.coach&&r.coach.name?r.coach.name:'otro coach';
   let html=`<div class="rt-card${isActive?' active':' archived'}" onclick="openRoutineEditor('${r.id}')">`;
   html+=`<div class="row mb-4" style="align-items:flex-start;gap:8px"><span class="fw-700" style="flex:1">${r.name}</span>${r.display_id?`<span class="text-xs text-mt mono" style="flex-shrink:0">${r.display_id}</span>`:''}</div>`;
   const metaParts=[`${dayCount} día${dayCount===1?'':'s'}`,`inicio ${dateStr}`];
   if(phaseLabel) metaParts.push(phaseLabel);
   if(r.frequency_per_week) metaParts.push(`${r.frequency_per_week}×/sem`);
   html+=`<div class="text-xs text-mt">${metaParts.join(' · ')}</div>`;
+  if(byOther) html+=`<div class="text-xs text-mt mt-4" style="font-style:italic">👤 Creada por ${byName}</div>`;
   if(r.coach_notes&&isActive) html+=`<div class="text-xs text-mt mt-8" style="font-style:italic">📝 ${r.coach_notes}</div>`;
   if(!isActive&&r.archived_at) html+=`<div class="text-xs text-mt mt-4">Archivada ${relativeTime(r.archived_at)}</div>`;
   if(isActive){
