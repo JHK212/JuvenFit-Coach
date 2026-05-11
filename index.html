@@ -1346,6 +1346,9 @@ function routineCard(r,isActive){
   html+=renderOwnershipLine(r);
   if(r.coach_notes&&isActive) html+=`<div class="text-xs text-mt mt-8" style="font-style:italic">📝 ${r.coach_notes}</div>`;
   if(!isActive&&r.archived_at) html+=`<div class="text-xs text-mt mt-4">Archivada ${relativeTime(r.archived_at)}</div>`;
+  if(!isActive){
+    html+=`<div class="flex gap-8 mt-12"><button class="btn-sm btn-out" style="flex:1" onclick="event.stopPropagation();reactivateRoutine('${r.id}')">♻ Reactivar</button><button class="btn-sm btn-out" style="flex:0 0 auto;color:var(--dn);border-color:rgba(220,38,38,0.3)" onclick="event.stopPropagation();confirmDeleteArchivedRoutine('${r.id}')" title="Eliminar">🗑</button></div>`;
+  }
   if(isActive){
     html+=`<div class="mt-12" style="display:grid;grid-template-columns:1fr 1fr 44px;gap:8px;min-width:0">`;
     html+=`<button class="btn-sm btn-out" style="min-width:0;padding:8px 6px" onclick="event.stopPropagation();openRoutineEditor('${r.id}')">✎ Editar</button>`;
@@ -1493,6 +1496,34 @@ async function archiveRoutine(routineId){
   const {error}=await sb.from('routines').update({status:'archived',archived_at:new Date().toISOString()}).eq('id',routineId);
   if(error){toast(error.message,'error');return;}
   toast('Archivada','success');
+  await loadAthleteRoutines(currentAthleteId);
+}
+
+async function reactivateRoutine(routineId){
+  const target=allRoutines.find(r=>r.id===routineId);
+  if(!target) return;
+  const currentActive=allRoutines.find(r=>r.status==='active');
+  const msg=currentActive
+    ?`¿Reactivar "${target.name}"?\n\n"${currentActive.name}" se va a archivar para que quede solo una rutina activa.`
+    :`¿Reactivar "${target.name}"?`;
+  if(!confirm(msg)) return;
+  if(currentActive){
+    const arch=await sb.from('routines').update({status:'archived',archived_at:new Date().toISOString()}).eq('id',currentActive.id);
+    if(arch.error){toast(arch.error.message,'error');return;}
+  }
+  const {error}=await sb.from('routines').update({status:'active',archived_at:null}).eq('id',routineId);
+  if(error){toast(error.message,'error');return;}
+  toast('Rutina reactivada','success');
+  await loadAthleteRoutines(currentAthleteId);
+}
+
+async function confirmDeleteArchivedRoutine(routineId){
+  const target=allRoutines.find(r=>r.id===routineId);
+  if(!target) return;
+  if(!confirm(`¿Eliminar definitivamente "${target.name}"?\n\nEsta acción no se puede deshacer.`)) return;
+  const {error}=await sb.from('routines').delete().eq('id',routineId);
+  if(error){toast(error.message,'error');return;}
+  toast('Rutina eliminada','success');
   await loadAthleteRoutines(currentAthleteId);
 }
 
