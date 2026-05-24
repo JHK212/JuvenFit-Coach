@@ -1744,7 +1744,10 @@ function formatGroupLabel(exs,gid,groupSize){
     const w=cfg.workSecs||'?', r=cfg.restSecs!=null?cfg.restSecs:'?', n=cfg.rounds||'?';
     return `${meta.icon} AMRAP ${w}s/${r}s × ${n} vuelta${n===1?'':'s'}`+(groupSize>1?` · ${groupSize} ej.`:'');
   }
-  if(fmt==='emom') {return `${meta.icon} EMOM ${cfg.duration||'?'}min × ${cfg.interval||60}s`+(groupSize>1?` · cycle ×${groupSize}`:'');}
+  if(fmt==='emom') {
+    const n=cfg.rounds||'?', it=cfg.interval||60;
+    return `${meta.icon} EMOM ${n} vuelta${n===1?'':'s'} × ${it}s`+(groupSize>1?` · ${groupSize} ej.`:'');
+  }
   return `${meta.icon} ${groupTerm(groupSize)}`;
 }
 
@@ -2000,10 +2003,10 @@ function openCreateMetabolicModal(bi){
       <div style="flex:1"><label class="label">Vueltas</label><input id="mb-rounds" type="number" class="input input-num" value="8" min="1" max="30" inputmode="numeric" oninput="updateMetabolicTotalHint()"></div>
     </div>
   </div>`;
-  // EMOM block (duration / interval)
+  // EMOM block (rounds / interval) — total derivado: rounds × nEx × interval
   html+=`<div id="mb-emom-wrap" style="display:none">
-    <div class="flex gap-12 mb-12">
-      <div style="flex:1"><label class="label">Duración (min)</label><input id="mb-duration" type="number" class="input input-num" value="10" min="1" max="60" inputmode="numeric" oninput="updateMetabolicTotalHint()"></div>
+    <div class="flex gap-8 mb-12">
+      <div style="flex:1"><label class="label">Vueltas</label><input id="mb-emom-rounds" type="number" class="input input-num" value="10" min="1" max="30" inputmode="numeric" oninput="updateMetabolicTotalHint()"></div>
       <div style="flex:1"><label class="label">Intervalo (seg)</label><input id="mb-interval" type="number" class="input input-num" value="60" min="10" max="600" inputmode="numeric" oninput="updateMetabolicTotalHint()"></div>
     </div>
   </div>`;
@@ -2054,10 +2057,10 @@ function updateMetabolicTotalHint(){
     const totalSecs=n*size*(w+r);
     hint.innerHTML=`⏱ Total: <span class="mono">${fmtMMSS(totalSecs)}</span> · ${n} vuelta${n===1?'':'s'} × ${size} ejercicio${size===1?'':'s'} × (${w}s+${r}s)`;
   } else {
-    const d=parseInt($("mb-duration")?.value)||0;
+    const n=parseInt($("mb-emom-rounds")?.value)||0;
     const it=parseInt($("mb-interval")?.value)||60;
-    const rounds=Math.floor(d*60/it);
-    hint.innerHTML=`⏱ Total: <span class="mono">${d}:00</span> · ${rounds} intervalo${rounds===1?'':'s'} de ${it}s${size>1?` (cycle ×${size})`:''}`;
+    const totalSecs=n*size*it;
+    hint.innerHTML=`⏱ Total: <span class="mono">${fmtMMSS(totalSecs)}</span> · ${n} vuelta${n===1?'':'s'} × ${size} ejercicio${size===1?'':'s'} × ${it}s`;
   }
 }
 function confirmCreateMetabolic(bi){
@@ -2073,11 +2076,11 @@ function confirmCreateMetabolic(bi){
     if(rounds<=0){toast('Las vueltas tienen que ser > 0','error');return;}
     cfg={workSecs,restSecs,rounds};
   } else {
-    const duration=parseInt($("mb-duration").value)||0;
+    const rounds=parseInt($("mb-emom-rounds").value)||0;
     const interval=parseInt($("mb-interval").value)||60;
-    if(duration<=0){toast('Duración inválida','error');return;}
+    if(rounds<=0){toast('Las vueltas tienen que ser > 0','error');return;}
     if(interval<=0||interval>600){toast('Intervalo inválido','error');return;}
-    cfg={duration,interval};
+    cfg={rounds,interval};
   }
   const gid='g'+uid();
   if(!editingDayState.blocks[bi].exercises) editingDayState.blocks[bi].exercises=[];
@@ -2252,13 +2255,13 @@ function renderBexRowHTML(ex,bi,ei,gi){
             </div>
           </div>`;
         } else if(ex.format==='emom'){
-          // EMOM: duración (min) + intervalo (seg)
+          // EMOM: vueltas + intervalo (seg)
           html+=`<div style="background:${fm.bg};padding:10px;border-radius:10px;margin-top:8px;border:1px solid ${fm.color}30">
             <div class="text-xs fw-700 mb-8" style="color:${fm.textColor};letter-spacing:.5px">CONFIG EMOM</div>
             <div class="flex gap-8">
               <div style="flex:1">
-                <div class="text-xs text-mt mb-4">Duración</div>
-                <div class="flex gap-4" style="align-items:center"><input type="number" class="xfl-inp" min="1" max="60" inputmode="numeric" value="${cfg.duration||10}" oninput="upGroupConfig(${bi},${ei},'duration',this.value)" style="text-align:center"><span class="text-xs text-mt">min</span></div>
+                <div class="text-xs text-mt mb-4">Vueltas</div>
+                <input type="number" class="xfl-inp" min="1" max="30" inputmode="numeric" value="${cfg.rounds||10}" oninput="upGroupConfig(${bi},${ei},'rounds',this.value)" style="text-align:center">
               </div>
               <div style="flex:1">
                 <div class="text-xs text-mt mb-4">Intervalo</div>
@@ -2696,7 +2699,9 @@ function metabolicMinutesFromDays(days){
           const w=parseInt(cfg.workSecs)||0, r=parseInt(cfg.restSecs)||0, n=parseInt(cfg.rounds)||0;
           minutes=(n*nEx*(w+r))/60;
         } else if(ex.format==='emom'){
-          minutes=parseFloat(cfg.duration)||0;
+          const nEx=(b.exercises||[]).filter(e=>e.groupId===ex.groupId).length;
+          const it=parseInt(cfg.interval)||60, n=parseInt(cfg.rounds)||0;
+          minutes=(n*nEx*it)/60;
         }
         if(minutes<=0) return;
         total+=minutes;
