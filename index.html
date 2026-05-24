@@ -1724,6 +1724,27 @@ const BLOCK_TYPES={
   custom:{label:'Personalizado',color:'#7c3aed'}
 };
 
+// Formatos metabólicos para grupos de ejercicios (dentro de cualquier bloque)
+const FORMAT_META={
+  normal:{label:'Biserie',color:'#eab308',textColor:'#a16207',bg:'rgba(234,179,8,0.06)',icon:'🔗',isMetabolic:false},
+  amrap :{label:'AMRAP', color:'#ea580c',textColor:'#9a3412',bg:'rgba(234,88,12,0.06)', icon:'🔥',isMetabolic:true},
+  emom  :{label:'EMOM',  color:'#2563eb',textColor:'#1d4ed8',bg:'rgba(37,99,235,0.06)', icon:'⏱',isMetabolic:true}
+};
+// El bloque "biserie/triserie" clásico vive bajo format='normal' (compat).
+function groupFirstEx(exs,gid){return (exs||[]).find(e=>e.groupId===gid)||null;}
+function groupFormat(exs,gid){const f=groupFirstEx(exs,gid);return (f&&f.format)||'normal';}
+function groupConfig(exs,gid){const f=groupFirstEx(exs,gid);return (f&&f.formatConfig)||null;}
+function isMetabolicFormat(fmt){return !!(FORMAT_META[fmt]&&FORMAT_META[fmt].isMetabolic);}
+// Header label de un grupo según formato/config
+function formatGroupLabel(exs,gid,groupSize){
+  const fmt=groupFormat(exs,gid);
+  const cfg=groupConfig(exs,gid)||{};
+  const meta=FORMAT_META[fmt]||FORMAT_META.normal;
+  if(fmt==='amrap'){return `${meta.icon} AMRAP ${cfg.duration||'?'} min`+(groupSize>1?` · ${groupSize} ejercicios`:'');}
+  if(fmt==='emom') {return `${meta.icon} EMOM ${cfg.duration||'?'}× ${cfg.interval||60}s`+(groupSize>1?` · cycle ×${groupSize}`:'');}
+  return `${meta.icon} ${groupTerm(groupSize)}`;
+}
+
 let editingDayIdx=null;
 let editingDayState=null;
 let expandedEx=null; // {bi, ei}
@@ -1844,7 +1865,17 @@ function computeBlockGroups(exs){
     const indexes=[];
     while(j<exs.length&&exs[j].groupId===gid){indexes.push(j);j++;}
     if(indexes.length<2){
-      // Singleton — limpiar el groupId huérfano (defensivo, no debería pasar)
+      // Singleton: AMRAP/EMOM single-exercise se conserva como grupo de 1
+      const onlyEx=exs[i];
+      if(isMetabolicFormat(onlyEx.format)){
+        result[i].groupId=gid;
+        result[i].groupSize=1;
+        result[i].isFirst=true;
+        result[i].isLast=true;
+        result[i].groupIndex=0;
+        i++;continue;
+      }
+      // Singleton no metabólico — huérfano, limpiar (defensivo)
       result[i].groupId=null;
       i++;continue;
     }
@@ -1881,9 +1912,11 @@ function renderBlockHTML(b,bi){
   } else {
     html+=`<div class="text-xs text-mt center" style="padding:8px 0">Sin ejercicios</div>`;
   }
+  const showMetabolicBtn=(b.type==='complementario');
   html+=`<div class="flex gap-8 mt-8">
     <button class="btn-out" style="flex:1;font-size:13px;padding:9px" onclick="openExPickerForBlock(${bi})">+ Ejercicio</button>
-    <button class="btn-out" style="flex:1;font-size:13px;padding:9px;color:#a16207;border-color:#eab308" onclick="openCreateGroupModal(${bi})">🔗 Biserie/Triserie</button>
+    <button class="btn-out" style="flex:1;font-size:13px;padding:9px;color:#a16207;border-color:#eab308" onclick="openCreateGroupModal(${bi})">🔗 Biserie</button>
+    ${showMetabolicBtn?`<button class="btn-out" style="flex:1;font-size:13px;padding:9px;color:#ea580c;border-color:#ea580c" onclick="openCreateMetabolicModal(${bi})">🔥 AMRAP/EMOM</button>`:''}
   </div>`;
   html+=`</div>`;
   return html;
@@ -1932,12 +1965,87 @@ function confirmCreateGroup(bi){
       rest:rest,
       objective:'',
       notes:'',
-      groupId:gid
+      groupId:gid,
+      format:'normal'
     });
   }
   closeModal();
   renderDayEditor();
   // Auto-abrir picker para el primer slot
+  setTimeout(()=>openExPickerForBlock(bi,firstIdx),120);
+}
+
+// ══ AMRAP / EMOM creator ══
+function openCreateMetabolicModal(bi){
+  window._mbFormat='amrap';
+  window._mbSize=1;
+  let html=`<div class="fw-800 mb-4" style="font-size:18px">🔥 Crear AMRAP / EMOM</div>`;
+  html+=`<div class="text-sm text-mt mb-16">Bloque metabólico (cronometrado). No cuenta para volumen muscular — aporta a "trabajo metabólico".</div>`;
+  html+=`<div class="mb-16">
+    <label class="label">Formato</label>
+    <div class="radio-group">
+      <button class="radio-btn active" data-mbfmt="amrap" onclick="setMetabolicFmt('amrap')" style="border-color:#ea580c;color:#ea580c">🔥 AMRAP</button>
+      <button class="radio-btn" data-mbfmt="emom" onclick="setMetabolicFmt('emom')" style="border-color:#2563eb;color:#2563eb">⏱ EMOM</button>
+    </div>
+    <div class="text-xs text-mt mt-4" id="mb-help">AMRAP: máximas rondas posibles en el tiempo dado</div>
+  </div>`;
+  html+=`<div class="flex gap-12 mb-16">
+    <div style="flex:1"><label class="label">Duración (min)</label><input id="mb-duration" type="number" class="input input-num" value="10" min="1" max="60" inputmode="numeric"></div>
+    <div style="flex:1" id="mb-interval-wrap" data-show-emom><label class="label">Intervalo (seg)</label><input id="mb-interval" type="number" class="input input-num" value="60" min="10" max="600" inputmode="numeric"></div>
+  </div>`;
+  html+=`<div class="mb-16">
+    <label class="label">Cantidad de ejercicios <span class="text-mt" style="font-weight:400">(cycle A → B → A...)</span></label>
+    <div class="radio-group">
+      <button class="radio-btn active" data-mbsize="1" onclick="setMetabolicSize(1)">1</button>
+      <button class="radio-btn" data-mbsize="2" onclick="setMetabolicSize(2)">2</button>
+      <button class="radio-btn" data-mbsize="3" onclick="setMetabolicSize(3)">3</button>
+      <button class="radio-btn" data-mbsize="4" onclick="setMetabolicSize(4)">4</button>
+    </div>
+  </div>`;
+  html+=`<button class="btn mb-12" onclick="confirmCreateMetabolic(${bi})" style="background:#ea580c">Crear y elegir ejercicios</button>`;
+  html+=`<button class="btn-out" onclick="closeModal()">Cancelar</button>`;
+  $("modal-content").innerHTML=html;$("modal").classList.add('show');
+  setMetabolicFmt('amrap');
+}
+function setMetabolicFmt(fmt){
+  window._mbFormat=fmt;
+  document.querySelectorAll('[data-mbfmt]').forEach(b=>b.classList.toggle('active',b.dataset.mbfmt===fmt));
+  const wrap=document.querySelector('#mb-interval-wrap');
+  if(wrap) wrap.style.display=(fmt==='emom')?'':'none';
+  const help=$("mb-help");
+  if(help) help.textContent=(fmt==='emom')?'EMOM: hacés las reps al inicio de cada intervalo y descansás lo que sobra':'AMRAP: máximas rondas posibles en el tiempo dado';
+}
+function setMetabolicSize(size){
+  window._mbSize=size;
+  document.querySelectorAll('[data-mbsize]').forEach(b=>b.classList.toggle('active',parseInt(b.dataset.mbsize)===size));
+}
+function confirmCreateMetabolic(bi){
+  const fmt=window._mbFormat||'amrap';
+  const size=window._mbSize||1;
+  const duration=parseInt($("mb-duration").value)||10;
+  const interval=fmt==='emom'?(parseInt($("mb-interval").value)||60):null;
+  if(duration<=0){toast('Duración inválida','error');return;}
+  if(fmt==='emom'&&(interval<=0||interval>600)){toast('Intervalo inválido','error');return;}
+  const gid='g'+uid();
+  const cfg=fmt==='amrap'?{duration}:{duration,interval};
+  if(!editingDayState.blocks[bi].exercises) editingDayState.blocks[bi].exercises=[];
+  const firstIdx=editingDayState.blocks[bi].exercises.length;
+  for(let k=0;k<size;k++){
+    editingDayState.blocks[bi].exercises.push({
+      id:uid(),
+      exerciseId:null,
+      sets:null,            // no aplica en metabólico
+      reps:'',
+      rest:'',
+      objective:'',
+      notes:'',
+      groupId:gid,
+      format:fmt,
+      formatConfig:cfg   // copiada en todos los miembros (invariante simple)
+    });
+  }
+  closeModal();
+  renderDayEditor();
   setTimeout(()=>openExPickerForBlock(bi,firstIdx),120);
 }
 
@@ -1999,15 +2107,19 @@ function renderBexRowHTML(ex,bi,ei,gi){
   const libEx=ex.exerciseId?allExercises.find(e=>e.id===ex.exerciseId):null;
   const isCustom=!ex.exerciseId&&!!ex.customName;
   const isEmptySlot=!ex.exerciseId&&!ex.customName&&ex.groupId; // slot creado top-down esperando ser llenado
+  const exsAll=editingDayState.blocks[bi].exercises;
+  // Visual del grupo (biserie / AMRAP / EMOM) — uniforme para slot vacío y row normal
+  const grpFmt=(gi&&gi.groupId)?groupFormat(exsAll,gi.groupId):'normal';
+  const fm=FORMAT_META[grpFmt]||FORMAT_META.normal;
   // Render compacto especial para slot vacío
   if(isEmptySlot){
-    const groupBorder='border-left:3px solid #eab308;';
-    const exs=editingDayState.blocks[bi].exercises;
-    const groupBadge=(gi&&gi.isFirst)?`<div style="font-size:10px;font-weight:800;color:#a16207;letter-spacing:.5px;margin-bottom:6px;text-transform:uppercase">🔗 ${groupTerm(gi.groupSize)}</div>`:'';
-    return `<div class="bex-row" style="${groupBorder};background:rgba(234,179,8,0.06);border-color:#eab308;cursor:pointer" onclick="openExPickerForBlock(${bi},${ei})">
+    const groupBorder=`border-left:3px solid ${fm.color};`;
+    const exs=exsAll;
+    const groupBadge=(gi&&gi.isFirst)?`<div style="font-size:10px;font-weight:800;color:${fm.textColor};letter-spacing:.5px;margin-bottom:6px;text-transform:uppercase">${formatGroupLabel(exs,gi.groupId,gi.groupSize)}</div>`:'';
+    return `<div class="bex-row" style="${groupBorder};background:${fm.bg};border-color:${fm.color};cursor:pointer" onclick="openExPickerForBlock(${bi},${ei})">
       ${groupBadge}
       <div class="row" style="align-items:center;gap:8px">
-        <span style="flex:1;font-style:italic;color:#a16207;font-weight:600">Tap para elegir ejercicio</span>
+        <span style="flex:1;font-style:italic;color:${fm.textColor};font-weight:600">Tap para elegir ejercicio</span>
         ${ei>0?`<button class="micro-btn" onclick="event.stopPropagation();moveExercise(${bi},${ei},-1)">↑</button>`:''}
         ${ei<exs.length-1?`<button class="micro-btn" onclick="event.stopPropagation();moveExercise(${bi},${ei},1)">↓</button>`:''}
         <span class="micro-btn" style="color:var(--dn)" onclick="event.stopPropagation();removeExercise(${bi},${ei})">✕</span>
@@ -2016,20 +2128,24 @@ function renderBexRowHTML(ex,bi,ei,gi){
   }
   const name=libEx?libEx.name:(ex.customName||ex.exerciseId||'Ejercicio');
   const isExp=expandedEx&&expandedEx.bi===bi&&expandedEx.ei===ei;
+  const isMetabolic=isMetabolicFormat(ex.format);
   const metaParts=[];
-  if(ex.sets&&ex.reps) metaParts.push(`${ex.sets}×${ex.reps}`);
-  else if(ex.sets) metaParts.push(`${ex.sets} series`);
-  else if(ex.reps) metaParts.push(ex.reps);
-  if(ex.rest) metaParts.push(`${ex.rest} des`);
+  if(isMetabolic){
+    // Para AMRAP/EMOM la meta visual es "X reps por ronda/intervalo"
+    if(ex.reps) metaParts.push(`${ex.reps} reps`);
+  } else {
+    if(ex.sets&&ex.reps) metaParts.push(`${ex.sets}×${ex.reps}`);
+    else if(ex.sets) metaParts.push(`${ex.sets} series`);
+    else if(ex.reps) metaParts.push(ex.reps);
+    if(ex.rest) metaParts.push(`${ex.rest} des`);
+  }
   const meta=metaParts.join(' · ');
-  const exs=editingDayState.blocks[bi].exercises;
+  const exs=exsAll;
   const s=v=>(v!=null&&v!==undefined)?String(v):'';
-  // Visual de grupo (biserie/triserie)
   const inGroup=gi&&gi.groupId;
-  const groupBorder=inGroup?'border-left:3px solid #eab308;':'';
-  const groupBadge=(inGroup&&gi.isFirst)?`<div style="font-size:10px;font-weight:800;color:#a16207;letter-spacing:.5px;margin-bottom:6px;text-transform:uppercase">🔗 ${groupTerm(gi.groupSize)}</div>`:'';
-  // Si está en grupo pero no es el primero, sumá una etiqueta sutil "+ del superset"
-  const groupContinuation=(inGroup&&!gi.isFirst)?`<span class="text-xs" style="color:#a16207;font-weight:700;margin-left:6px">+${gi.groupIndex+1}</span>`:'';
+  const groupBorder=inGroup?`border-left:3px solid ${fm.color};`:'';
+  const groupBadge=(inGroup&&gi.isFirst)?`<div style="font-size:10px;font-weight:800;color:${fm.textColor};letter-spacing:.5px;margin-bottom:6px;text-transform:uppercase">${formatGroupLabel(exs,gi.groupId,gi.groupSize)}</div>`:'';
+  const groupContinuation=(inGroup&&!gi.isFirst)?`<span class="text-xs" style="color:${fm.textColor};font-weight:700;margin-left:6px">+${gi.groupIndex+1}</span>`:'';
   let html=`<div class="bex-row" style="${groupBorder}">
     ${groupBadge}
     <div class="bex-top">
@@ -2044,8 +2160,40 @@ function renderBexRowHTML(ex,bi,ei,gi){
       ${isCustom?`<div class="xfl">
         <span class="xfl-lbl">Nombre</span>
         <input type="text" class="xfl-inp" value="${s(ex.customName)}" placeholder="Ej: Curl con polea baja" oninput="upEx(${bi},${ei},'customName',this.value)">
-      </div>`:''}
-      <div class="xfl">
+      </div>`:''}`;
+    // Bloque metabólico (AMRAP/EMOM) — solo reps + config del grupo
+    if(isMetabolic){
+      const cfg=ex.formatConfig||{};
+      const isFirstOfGroup=gi&&gi.isFirst;
+      const repsPlaceholder=ex.format==='emom'?'5':'10';
+      const repsChips=ex.format==='emom'?['3','5','8','10','12']:['5','8','10','12','15','20'];
+      html+=`<div class="xfl" style="align-items:flex-start">
+        <span class="xfl-lbl" style="padding-top:6px">Reps</span>
+        <div style="flex:1">
+          <input id="reps-${bi}-${ei}" type="text" class="xfl-inp" value="${s(ex.reps)}" placeholder="${repsPlaceholder}" oninput="upEx(${bi},${ei},'reps',this.value)">
+          <div class="qchip-row">
+            ${repsChips.map(v=>`<span class="qchip" onclick="setQuickField('reps-${bi}-${ei}',${bi},${ei},'reps','${v}')">${v}</span>`).join('')}
+          </div>
+          <div class="text-xs text-mt mt-4">${ex.format==='emom'?'Reps al inicio de cada intervalo':'Reps por ronda'}</div>
+        </div>
+      </div>`;
+      if(isFirstOfGroup){
+        html+=`<div class="xfl" style="background:${fm.bg};padding:8px 10px;border-radius:8px;margin-top:8px">
+          <span class="xfl-lbl" style="color:${fm.textColor};font-weight:800">Duración</span>
+          <input type="number" class="xfl-inp" min="1" max="60" inputmode="numeric" value="${cfg.duration||10}" oninput="upGroupConfig(${bi},${ei},'duration',this.value)" style="max-width:80px;flex:none">
+          <span class="text-xs text-mt" style="margin-left:6px">min</span>
+        </div>`;
+        if(ex.format==='emom'){
+          html+=`<div class="xfl" style="background:${fm.bg};padding:8px 10px;border-radius:8px;margin-top:6px">
+            <span class="xfl-lbl" style="color:${fm.textColor};font-weight:800">Intervalo</span>
+            <input type="number" class="xfl-inp" min="10" max="600" inputmode="numeric" value="${cfg.interval||60}" oninput="upGroupConfig(${bi},${ei},'interval',this.value)" style="max-width:80px;flex:none">
+            <span class="text-xs text-mt" style="margin-left:6px">seg</span>
+          </div>`;
+        }
+      }
+    } else {
+      // Bloque normal — campos clásicos
+      html+=`<div class="xfl">
         <span class="xfl-lbl">Series</span>
         <input type="number" class="xfl-inp" min="1" max="20" inputmode="numeric" value="${s(ex.sets)}" placeholder="4" oninput="upEx(${bi},${ei},'sets',this.value)" style="max-width:80px;flex:none">
       </div>
@@ -2066,10 +2214,11 @@ function renderBexRowHTML(ex,bi,ei,gi){
             ${['30 segs','45 segs','60 segs','90 segs','2 min','3 min'].map(v=>`<span class="qchip" onclick="setQuickField('rest-${bi}-${ei}',${bi},${ei},'rest','${v}')">${v}</span>`).join('')}
           </div>
         </div>
-      </div>
-      <div class="xfl">
+      </div>`;
+    }
+    html+=`<div class="xfl">
         <span class="xfl-lbl">Objetivo</span>
-        <input type="text" class="xfl-inp" value="${s(ex.objective)}" placeholder="hipertrofia, fuerza..." oninput="upEx(${bi},${ei},'objective',this.value)">
+        <input type="text" class="xfl-inp" value="${s(ex.objective)}" placeholder="${isMetabolic?'capacidad, conditioning...':'hipertrofia, fuerza...'}" oninput="upEx(${bi},${ei},'objective',this.value)">
       </div>
       <div class="xfl" style="align-items:flex-start">
         <span class="xfl-lbl" style="padding-top:8px">Notas</span>
@@ -2096,10 +2245,13 @@ function renderGroupActionHTML(bi,ei,gi){
   const hasNext=ei<exs.length-1;
   const nextEx=hasNext?exs[ei+1]:null;
   const nextInSameGroup=inGroup&&nextEx&&nextEx.groupId===gi.groupId;
+  const cur=exs[ei];
+  const curMet=isMetabolicFormat(cur.format);
+  const nxtMet=nextEx&&isMetabolicFormat(nextEx.format);
   let html=`<div class="mt-12" style="padding-top:10px;border-top:1px dashed var(--bd);display:flex;flex-direction:column;gap:8px">`;
   let renderedAny=false;
-  // Botón para sumar el siguiente al grupo (o crear nuevo grupo)
-  if(hasNext&&!nextInSameGroup){
+  // Botón para sumar el siguiente al grupo — solo si ambos son normales (no mezclar formatos)
+  if(hasNext&&!nextInSameGroup&&!curMet&&!nxtMet){
     const nextLibEx=nextEx.exerciseId?allExercises.find(e=>e.id===nextEx.exerciseId):null;
     const nextName=nextLibEx?nextLibEx.name:(nextEx.customName||'siguiente');
     let label;
@@ -2114,8 +2266,12 @@ function renderGroupActionHTML(bi,ei,gi){
     renderedAny=true;
   }
   if(inGroup){
-    const term=gi.groupSize===2?'biserie':gi.groupSize===3?'triserie':'grupo';
-    html+=`<button class="btn-sm btn-out" onclick="ungroupExercise(${bi},${ei})" style="width:100%;font-size:12px;color:#a16207;border-color:#eab308">🔗 Sacar de la ${term}</button>`;
+    const fm=FORMAT_META[cur.format||'normal']||FORMAT_META.normal;
+    let term;
+    if(curMet) term=cur.format.toUpperCase();
+    else term=gi.groupSize===2?'biserie':gi.groupSize===3?'triserie':'grupo';
+    const action=curMet?'Quitar formato':'Sacar de la';
+    html+=`<button class="btn-sm btn-out" onclick="ungroupExercise(${bi},${ei})" style="width:100%;font-size:12px;color:${fm.textColor};border-color:${fm.color}">${fm.icon} ${action} ${term}</button>`;
     renderedAny=true;
   }
   html+=`</div>`;
@@ -2126,27 +2282,43 @@ function groupWithNext(bi,ei){
   const exs=editingDayState.blocks[bi].exercises;
   if(ei>=exs.length-1) return;
   const cur=exs[ei], nxt=exs[ei+1];
-  // Si el siguiente ya tiene grupo, extendemos ese; sino generamos uno nuevo
+  // No mezclar formatos: AMRAP/EMOM no se combinan con biseries normales
+  if(isMetabolicFormat(cur.format)||isMetabolicFormat(nxt.format)){
+    toast('AMRAP/EMOM no se mezclan con biseries normales','error');
+    return;
+  }
   const gid=nxt.groupId||cur.groupId||('g'+uid());
   cur.groupId=gid;
   nxt.groupId=gid;
+  cur.format=cur.format||'normal';
+  nxt.format=nxt.format||'normal';
   cleanupSingletonGroups(bi);
   renderDayEditor();
 }
 
 function ungroupExercise(bi,ei){
   const exs=editingDayState.blocks[bi].exercises;
-  delete exs[ei].groupId;
+  const ex=exs[ei];
+  delete ex.groupId;
+  // Si era metabólico, vuelve a normal y borra config
+  if(isMetabolicFormat(ex.format)){
+    ex.format='normal';
+    delete ex.formatConfig;
+  }
   cleanupSingletonGroups(bi);
   renderDayEditor();
 }
 
 function cleanupSingletonGroups(bi){
-  // Si un groupId queda con un solo miembro, lo quitamos (ya no es grupo)
+  // Si un groupId queda con un solo miembro, lo quitamos — excepto AMRAP/EMOM single-exercise
   const exs=editingDayState.blocks[bi].exercises;
   const counts={};
   exs.forEach(ex=>{if(ex.groupId) counts[ex.groupId]=(counts[ex.groupId]||0)+1;});
-  exs.forEach(ex=>{if(ex.groupId&&counts[ex.groupId]<2) delete ex.groupId;});
+  exs.forEach(ex=>{
+    if(ex.groupId&&counts[ex.groupId]<2&&!isMetabolicFormat(ex.format)){
+      delete ex.groupId;
+    }
+  });
   // Validación adicional: el grupo debe ser contiguo. Si no, dispersamos los huérfanos.
   // (el coach no debería poder romper la contigüidad porque al mover ejercicios
   // arrastra el grupo entero — pero por seguridad)
@@ -2197,6 +2369,23 @@ function setQuickField(inputId,bi,ei,field,val){
   const inp=$(inputId);
   if(inp) inp.value=val;
   upEx(bi,ei,field,val);
+}
+
+// Actualiza un campo de formatConfig en TODOS los miembros del grupo (invariante: copia idéntica)
+function upGroupConfig(bi,ei,key,val){
+  const exs=editingDayState.blocks[bi].exercises;
+  const gid=exs[ei].groupId;
+  if(!gid) return;
+  const num=parseInt(val);
+  const parsed=isNaN(num)?val:num;
+  exs.forEach(e=>{
+    if(e.groupId!==gid) return;
+    e.formatConfig=e.formatConfig||{};
+    e.formatConfig[key]=parsed;
+  });
+  // Re-render para que el header del grupo (badge) y la métrica metabólica reflejen el cambio
+  if(_dayChartTimer) clearTimeout(_dayChartTimer);
+  _dayChartTimer=setTimeout(()=>{drawDayMuscleChart();renderDayEditor();},250);
 }
 
 function moveBlock(bi,dir){
@@ -2373,6 +2562,7 @@ function muscleVolumeFromDays(days){
   (days||[]).forEach(d=>{
     (d.blocks||[]).forEach(b=>{
       (b.exercises||[]).forEach(ex=>{
+        if(isMetabolicFormat(ex.format)) return; // AMRAP/EMOM no aportan al pie chart
         const lib=ex.exerciseId?allExercises.find(e=>e.id===ex.exerciseId):null;
         if(!lib||!lib.muscle_activation||!Object.keys(lib.muscle_activation).length){uncovered++;return;}
         const sets=parseInt(ex.sets)||0;
@@ -2393,6 +2583,7 @@ function contributionsFromDays(days,zoneName){
   (days||[]).forEach(d=>{
     (d.blocks||[]).forEach(b=>{
       (b.exercises||[]).forEach(ex=>{
+        if(isMetabolicFormat(ex.format)) return; // AMRAP/EMOM no contribuyen al desglose por zona
         const lib=ex.exerciseId?allExercises.find(e=>e.id===ex.exerciseId):null;
         if(!lib||!lib.muscle_activation) return;
         const zonePct=zoneMuscles.reduce((s,m)=>s+(lib.muscle_activation[m]||0),0);
@@ -2406,6 +2597,27 @@ function contributionsFromDays(days,zoneName){
     });
   });
   return contribs.sort((a,b)=>b.reps-a.reps);
+}
+
+// Trabajo metabólico (suma de duraciones de AMRAP/EMOM) en minutos
+function metabolicMinutesFromDays(days){
+  let total=0;
+  const breakdown=[]; // {fmt, duration, day}
+  (days||[]).forEach(d=>{
+    (d.blocks||[]).forEach(b=>{
+      const seenGroups=new Set();
+      (b.exercises||[]).forEach(ex=>{
+        if(!isMetabolicFormat(ex.format)||!ex.groupId) return;
+        if(seenGroups.has(ex.groupId)) return;
+        seenGroups.add(ex.groupId);
+        const dur=(ex.formatConfig&&parseFloat(ex.formatConfig.duration))||0;
+        if(dur<=0) return;
+        total+=dur;
+        breakdown.push({fmt:ex.format,duration:dur,day:d.name||'Día'});
+      });
+    });
+  });
+  return {total,breakdown};
 }
 function _scopedDays(scope){
   if(scope==='day') return editingDayState?[editingDayState]:[];
@@ -2472,6 +2684,7 @@ function drawMuscleChartIn(opts){
   const sec=$(opts.secId);if(!sec) return;
   const days=opts.days||[];
   const {totals,uncovered}=muscleVolumeFromDays(days);
+  const {total:metaMin,breakdown:metaBreakdown}=metabolicMinutesFromDays(days);
   const zoneVols=Object.entries(BODY_ZONES).map(([name,def])=>({
     name,v:def.muscles.reduce((s,m)=>s+(totals[m]||0),0),color:def.color
   })).filter(z=>z.v>0).sort((a,b)=>b.v-a.v);
@@ -2480,7 +2693,29 @@ function drawMuscleChartIn(opts){
   if(exCount===0){sec.style.display='none';return;}
   sec.style.display='block';
   if(opts.metaId&&$(opts.metaId)) $(opts.metaId).textContent=opts.label||`${exCount} ej.`;
+  // Indicador metabólico — reutilizado tanto cuando hay pie como cuando no
+  const metabolicHTML=(()=>{
+    if(metaMin<=0) return '';
+    const amrapMin=metaBreakdown.filter(x=>x.fmt==='amrap').reduce((s,x)=>s+x.duration,0);
+    const emomMin =metaBreakdown.filter(x=>x.fmt==='emom') .reduce((s,x)=>s+x.duration,0);
+    const subs=[];
+    if(amrapMin>0) subs.push(`🔥 ${amrapMin}min AMRAP`);
+    if(emomMin>0)  subs.push(`⏱ ${emomMin}min EMOM`);
+    return `<div class="text-xs text-mt fw-700 mt-20" style="margin-bottom:8px;letter-spacing:.5px">TRABAJO METABÓLICO</div>
+      <div style="display:flex;gap:10px;align-items:center;background:rgba(234,88,12,0.06);border:1px solid rgba(234,88,12,0.25);border-radius:10px;padding:10px 12px">
+        <span style="font-size:22px">🔥</span>
+        <div style="flex:1">
+          <div class="fw-800" style="color:#9a3412">${metaMin} min totales</div>
+          <div class="text-xs text-mt">${subs.join(' · ')}</div>
+        </div>
+      </div>`;
+  })();
   if(total===0){
+    if(metaMin>0){
+      // Sólo trabajo metabólico, sin volumen estructural
+      $(opts.contentId).innerHTML=`<div class="text-sm text-mt center mb-12" style="font-style:italic">Este ${opts.scope==='day'?'día':'plan'} sólo tiene bloques metabólicos — el pie chart de volumen muscular se omite.</div>${metabolicHTML}`;
+      return;
+    }
     const msg=uncovered>0
       ?`${uncovered} ejercicio${uncovered===1?'':'s'} sin series/reps o sin biblioteca. Completá esos campos para ver el balance.`
       :'Sin datos para calcular volumen. Completá series y reps en cada ejercicio.';
@@ -2543,7 +2778,7 @@ function drawMuscleChartIn(opts){
   }
   let warn='';
   if(uncovered>0) warn=`<div class="text-xs text-mt center mt-8" style="font-style:italic">⚠ ${uncovered} ejercicio${uncovered===1?'':'s'} sin biblioteca o sin activación (no contribuyen al balance)</div>`;
-  $(opts.contentId).innerHTML=svg+legend+groupBar+warn;
+  $(opts.contentId).innerHTML=svg+legend+groupBar+metabolicHTML+warn;
 }
 
 function drawRoutineMuscleChart(){
