@@ -1741,7 +1741,8 @@ const BLOCK_TYPES={
 const FORMAT_META={
   normal:{label:'Biserie',color:'#eab308',textColor:'#a16207',bg:'rgba(234,179,8,0.06)',icon:'🔗',isMetabolic:false},
   amrap :{label:'AMRAP', color:'#ea580c',textColor:'#9a3412',bg:'rgba(234,88,12,0.06)', icon:'🔥',isMetabolic:true},
-  emom  :{label:'EMOM',  color:'#2563eb',textColor:'#1d4ed8',bg:'rgba(37,99,235,0.06)', icon:'⏱',isMetabolic:true}
+  emom  :{label:'EMOM',  color:'#2563eb',textColor:'#1d4ed8',bg:'rgba(37,99,235,0.06)', icon:'⏱',isMetabolic:true},
+  core  :{label:'Core',  color:'#7c3aed',textColor:'#5b21b6',bg:'rgba(124,58,237,0.06)',icon:'💪',isMetabolic:false}
 };
 // El bloque "biserie/triserie" clásico vive bajo format='normal' (compat).
 function groupFirstEx(exs,gid){return (exs||[]).find(e=>e.groupId===gid)||null;}
@@ -1760,6 +1761,13 @@ function formatGroupLabel(exs,gid,groupSize){
   if(fmt==='emom') {
     const n=cfg.rounds||'?', it=cfg.interval||60;
     return `${meta.icon} EMOM ${n} vuelta${n===1?'':'s'} × ${it}s`+(groupSize>1?` · ${groupSize} ej.`:'');
+  }
+  if(fmt==='core'){
+    const first=groupFirstEx(exs,gid)||{};
+    const n=first.sets||cfg.rounds||'?';
+    const rest=first.rest||cfg.rest||'';
+    const pn=cfg.presetName?` · ${cfg.presetName}`:'';
+    return `${meta.icon} CORE${pn} · ${n} vuelta${n===1?'':'s'}`+(rest?` · ${rest} desc`:'')+(groupSize>1?` · ${groupSize} ej.`:'');
   }
   return `${meta.icon} ${groupTerm(groupSize)}`;
 }
@@ -2274,6 +2282,7 @@ function applyCorePreset(bi,presetId){
   if(!editingDayState||!editingDayState.blocks[bi]){toast('Bloque inválido','error');return;}
   if(!editingDayState.blocks[bi].exercises) editingDayState.blocks[bi].exercises=[];
   const gid='g'+uid();
+  const cfg={presetName:p.name,rounds:p.rounds,rest:p.rest};
   (p.exercise_ids||[]).forEach(exId=>{
     const lib=allExercises.find(e=>e.id===exId);
     const mode=(lib&&lib.track_mode)||'reps';
@@ -2287,7 +2296,8 @@ function applyCorePreset(bi,presetId){
       objective:'',
       notes:'',
       groupId:gid,
-      format:'normal'
+      format:'core',
+      formatConfig:cfg
     });
   });
   closeModal();
@@ -2571,8 +2581,8 @@ function ungroupExercise(bi,ei){
   const exs=editingDayState.blocks[bi].exercises;
   const ex=exs[ei];
   delete ex.groupId;
-  // Si era metabólico, vuelve a normal y borra config
-  if(isMetabolicFormat(ex.format)){
+  // Si era metabólico o core, vuelve a normal y borra config
+  if(ex.format&&ex.format!=='normal'){
     ex.format='normal';
     delete ex.formatConfig;
   }
@@ -2588,6 +2598,7 @@ function cleanupSingletonGroups(bi){
   exs.forEach(ex=>{
     if(ex.groupId&&counts[ex.groupId]<2&&!isMetabolicFormat(ex.format)){
       delete ex.groupId;
+      if(ex.format==='core'){ex.format='normal';delete ex.formatConfig;}
     }
   });
   // Validación adicional: el grupo debe ser contiguo. Si no, dispersamos los huérfanos.
