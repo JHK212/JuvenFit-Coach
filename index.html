@@ -263,6 +263,7 @@ textarea.xfl-inp{resize:none;min-height:48px;font-size:14px;}
       <span class="pill active" data-filter="all" onclick="setFilter('all')">Todos</span>
       <span class="pill" data-filter="compound" onclick="setFilter('compound')">Compuestos</span>
       <span class="pill" data-filter="aislacion" onclick="setFilter('aislacion')">Aislación</span>
+      <span class="pill" data-filter="core" onclick="setFilter('core')">Core</span>
       <span class="pill" data-filter="movilidad" onclick="setFilter('movilidad')">Movilidad</span>
     </div>
 
@@ -498,6 +499,7 @@ textarea.xfl-inp{resize:none;min-height:48px;font-size:14px;}
       <div class="radio-group">
         <button class="radio-btn" data-cat="compound" onclick="setEditorCategory('compound')">Compuesto</button>
         <button class="radio-btn" data-cat="aislacion" onclick="setEditorCategory('aislacion')">Aislación</button>
+        <button class="radio-btn" data-cat="core" onclick="setEditorCategory('core')">Core</button>
         <button class="radio-btn" data-cat="movilidad" onclick="setEditorCategory('movilidad')">Movilidad</button>
       </div>
     </div>
@@ -620,6 +622,8 @@ let currentAthleteId=null;    // alumno cuyo detalle estoy viendo
 let showAllArchived=false;    // expandir/colapsar histórico
 let editingRoutine=null;
 let editingRoutineState=null;
+let corePresets=[];           // presets de circuitos de Core del coach
+let editingPreset=null;       // preset en edición dentro del modal
 
 // ══ HELPERS ══
 function $(id){return document.getElementById(id);}
@@ -740,6 +744,14 @@ function enterApp(){
   $("ath-coach-name").textContent=name;
   loadExercises();
   loadAthletes();
+  loadCorePresets();
+}
+
+async function loadCorePresets(){
+  if(!coachProfile) return;
+  const {data,error}=await sb.from('core_presets').select('*').eq('coach_id',coachProfile.id).order('name',{ascending:true});
+  if(error){console.warn('loadCorePresets error:',error.message);return;}
+  corePresets=data||[];
 }
 
 // ══ EXERCISE LIST ══
@@ -758,6 +770,7 @@ function renderList(){
   let items=allExercises.filter(ex=>{
     if(currentFilter==='compound'&&ex.category!=='compound')return false;
     if(currentFilter==='aislacion'&&ex.category!=='aislacion')return false;
+    if(currentFilter==='core'&&ex.category!=='core')return false;
     if(currentFilter==='movilidad'&&ex.category!=='movilidad')return false;
     if(search){
       const hay=normalizeText(ex.name+' '+(ex.aliases||[]).join(' '));
@@ -1717,7 +1730,7 @@ function copyToClipboard(text,btn){
 
 // ══ BLOCKS / DAY BUILDER (4.5) ══
 const BLOCK_TYPES={
-  movilidad:{label:'Movilidad',color:'#78716c'},
+  movilidad:{label:'Movilidad + Core',color:'#78716c'},
   principal:{label:'Principal',color:'#5A1A1A'},
   complementario:{label:'Complementario',color:'#2563eb'},
   finisher:{label:'Finisher',color:'#16a34a'},
@@ -1919,10 +1932,12 @@ function renderBlockHTML(b,bi){
     html+=`<div class="text-xs text-mt center" style="padding:8px 0">Sin ejercicios</div>`;
   }
   const showMetabolicBtn=(b.type==='complementario');
-  html+=`<div class="flex gap-8 mt-8">
-    <button class="btn-out" style="flex:1;font-size:13px;padding:9px" onclick="openExPickerForBlock(${bi})">+ Ejercicio</button>
-    <button class="btn-out" style="flex:1;font-size:13px;padding:9px;color:#a16207;border-color:#eab308" onclick="openCreateGroupModal(${bi})">🔗 Biserie</button>
-    ${showMetabolicBtn?`<button class="btn-out" style="flex:1;font-size:13px;padding:9px;color:#ea580c;border-color:#ea580c" onclick="openCreateMetabolicModal(${bi})">🔥 AMRAP/EMOM</button>`:''}
+  const showCoreBtn=(b.type==='movilidad');
+  html+=`<div class="flex gap-8 mt-8" style="flex-wrap:wrap">
+    <button class="btn-out" style="flex:1;min-width:120px;font-size:13px;padding:9px" onclick="openExPickerForBlock(${bi})">+ Ejercicio</button>
+    <button class="btn-out" style="flex:1;min-width:120px;font-size:13px;padding:9px;color:#a16207;border-color:#eab308" onclick="openCreateGroupModal(${bi})">🔗 Biserie</button>
+    ${showMetabolicBtn?`<button class="btn-out" style="flex:1;min-width:120px;font-size:13px;padding:9px;color:#ea580c;border-color:#ea580c" onclick="openCreateMetabolicModal(${bi})">🔥 AMRAP/EMOM</button>`:''}
+    ${showCoreBtn?`<button class="btn-out" style="flex:1;min-width:120px;font-size:13px;padding:9px;color:#7c3aed;border-color:#7c3aed" onclick="openCorePresetPicker(${bi})">💪 Core preset</button>`:''}
   </div>`;
   html+=`</div>`;
   return html;
@@ -2102,6 +2117,182 @@ function confirmCreateMetabolic(bi){
   closeModal();
   renderDayEditor();
   setTimeout(()=>openExPickerForBlock(bi,firstIdx),120);
+}
+
+// ══ CORE PRESETS — triseries reusables de abdominales ══
+function openCorePresetPicker(bi){
+  let html=`<div class="fw-800 mb-4" style="font-size:18px">💪 Presets de Core</div>`;
+  html+=`<div class="text-sm text-mt mb-16">Circuitos de abdominales reusables. Tocá un preset para aplicarlo al bloque actual.</div>`;
+  if(corePresets.length){
+    html+=corePresets.map(p=>{
+      const exNames=(p.exercise_ids||[]).map(id=>{const ex=allExercises.find(e=>e.id===id);return ex?ex.name:id;}).join(' · ');
+      const sizeLbl=p.size===2?'Biserie':(p.size===3?'Triserie':`×${p.size}`);
+      return `<div class="picker-item" style="flex-direction:column;align-items:stretch;gap:6px;cursor:default">
+        <div class="row" style="align-items:center;gap:8px">
+          <span class="fw-700" style="flex:1">${p.name}</span>
+          <span class="micro-btn" title="Editar" onclick="openCorePresetEditor('${p.id}',${bi})">✎</span>
+          <span class="micro-btn" style="color:var(--dn)" title="Borrar" onclick="deleteCorePreset('${p.id}',${bi})">✕</span>
+        </div>
+        <div class="text-xs text-mt">${sizeLbl} · ${p.rounds} vuelta${p.rounds===1?'':'s'} · ${p.rest} desc</div>
+        <div class="text-xs" style="color:#5A1A1A">${exNames||'<span class="text-mt">sin ejercicios</span>'}</div>
+        <button class="btn" style="padding:9px;font-size:13px;margin-top:4px;background:#7c3aed" onclick="applyCorePreset(${bi},'${p.id}')">Aplicar al bloque</button>
+      </div>`;
+    }).join('');
+  } else {
+    html+=`<div class="text-sm text-mt center" style="padding:24px 0">Sin presets todavía</div>`;
+  }
+  html+=`<button class="btn-out mt-12" style="border-style:dashed;border-color:#7c3aed;color:#7c3aed" onclick="openCorePresetEditor(null,${bi})">+ Nuevo preset</button>`;
+  html+=`<button class="btn-out mt-8" onclick="closeModal()">Cerrar</button>`;
+  $("modal-content").innerHTML=html;$("modal").classList.add('show');
+}
+
+function openCorePresetEditor(presetId,bi){
+  if(presetId){
+    const p=corePresets.find(x=>x.id===presetId);
+    if(!p){toast('Preset no encontrado','error');return;}
+    editingPreset={id:p.id,name:p.name,size:p.size,rounds:p.rounds,rest:p.rest,exercise_ids:[...(p.exercise_ids||[])]};
+  } else {
+    editingPreset={id:null,name:'',size:3,rounds:3,rest:'60 segs',exercise_ids:[]};
+  }
+  renderCorePresetEditor(bi);
+}
+
+function renderCorePresetEditor(bi){
+  while(editingPreset.exercise_ids.length<editingPreset.size) editingPreset.exercise_ids.push(null);
+  if(editingPreset.exercise_ids.length>editingPreset.size) editingPreset.exercise_ids=editingPreset.exercise_ids.slice(0,editingPreset.size);
+  const p=editingPreset;
+  const escName=(p.name||'').replace(/"/g,'&quot;');
+  const escRest=(p.rest||'').replace(/"/g,'&quot;');
+  let html=`<div class="fw-800 mb-12" style="font-size:18px">${p.id?'✎ Editar':'+ Nuevo'} preset de Core</div>`;
+  html+=`<label class="label">Nombre</label>`;
+  html+=`<input class="input mb-12" placeholder="Ej: Core básico" value="${escName}" oninput="editingPreset.name=this.value">`;
+  html+=`<label class="label">Tipo</label>
+    <div class="radio-group mb-12">
+      <button class="radio-btn${p.size===2?' active':''}" onclick="setPresetSize(2,${bi})">Biserie</button>
+      <button class="radio-btn${p.size===3?' active':''}" onclick="setPresetSize(3,${bi})">Triserie</button>
+      <button class="radio-btn${p.size===4?' active':''}" onclick="setPresetSize(4,${bi})">×4</button>
+    </div>`;
+  html+=`<div class="flex gap-12 mb-12">
+    <div style="flex:1"><label class="label">Vueltas</label><input type="number" class="input input-num" min="1" max="20" inputmode="numeric" value="${p.rounds}" oninput="editingPreset.rounds=Math.max(1,parseInt(this.value)||1)"></div>
+    <div style="flex:1"><label class="label">Descanso</label><input type="text" class="input" value="${escRest}" oninput="editingPreset.rest=this.value" placeholder="60 segs"></div>
+  </div>`;
+  html+=`<label class="label">Ejercicios</label>`;
+  p.exercise_ids.forEach((eid,idx)=>{
+    const ex=eid?allExercises.find(e=>e.id===eid):null;
+    const nameHtml=ex?`<span class="fw-700">${ex.name}</span>`:`<span class="text-mt" style="font-style:italic">Tap para elegir</span>`;
+    html+=`<div class="picker-item" style="cursor:pointer" onclick="openPresetSlotPicker(${idx},${bi})">
+      <div><div class="text-sm">${idx+1}. ${nameHtml}</div></div>
+      ${eid?`<span class="micro-btn" style="color:var(--dn)" onclick="event.stopPropagation();clearPresetSlot(${idx},${bi})">✕</span>`:''}
+    </div>`;
+  });
+  html+=`<div class="text-xs text-mt mt-8 mb-12">En el picker, los ejercicios "Core" aparecen primero.</div>`;
+  html+=`<button class="btn mb-8" onclick="saveCorePreset(${bi})">${p.id?'Guardar cambios':'Crear preset'}</button>`;
+  html+=`<button class="btn-out" onclick="openCorePresetPicker(${bi})">Volver</button>`;
+  $("modal-content").innerHTML=html;$("modal").classList.add('show');
+}
+
+function setPresetSize(size,bi){
+  editingPreset.size=size;
+  renderCorePresetEditor(bi);
+}
+
+function clearPresetSlot(idx,bi){
+  editingPreset.exercise_ids[idx]=null;
+  renderCorePresetEditor(bi);
+}
+
+function openPresetSlotPicker(idx,bi){
+  const sorted=[...allExercises].sort((a,b)=>{
+    const ac=a.category==='core'?0:1, bc=b.category==='core'?0:1;
+    if(ac!==bc) return ac-bc;
+    return a.name.localeCompare(b.name);
+  });
+  let html=`<div class="fw-800 mb-12" style="font-size:18px">Elegí ejercicio ${idx+1}</div>`;
+  html+=`<input id="preset-search" class="search-input" placeholder="🔍 Buscar..." oninput="filterPickerList(this.value,'.preset-pick-item')" autofocus>`;
+  html+=`<div style="max-height:55dvh;overflow-y:auto;margin-top:12px">`;
+  sorted.forEach(ex=>{
+    const muscles=ex.category==='movilidad'?'movilidad':Object.keys(ex.muscle_activation||{}).slice(0,2).map(m=>MUSCLE_LABELS[m]||m).join(' · ');
+    const coreBadge=ex.category==='core'?' · <span style="color:#7c3aed;font-weight:700">CORE</span>':'';
+    html+=`<div class="picker-item preset-pick-item" data-name="${normalizeText(ex.name+' '+(ex.aliases||[]).join(' '))}" onclick="fillPresetSlot(${idx},'${ex.id}',${bi})">
+      <div><div class="fw-700 text-sm">${ex.name}</div><div class="text-xs text-mt">${muscles||'—'}${coreBadge}</div></div>
+    </div>`;
+  });
+  html+=`</div><button class="btn-out mt-12" onclick="renderCorePresetEditor(${bi})">Cancelar</button>`;
+  $("modal-content").innerHTML=html;$("modal").classList.add('show');
+}
+
+function fillPresetSlot(idx,exId,bi){
+  editingPreset.exercise_ids[idx]=exId;
+  renderCorePresetEditor(bi);
+}
+
+async function saveCorePreset(bi){
+  const p=editingPreset;
+  const name=(p.name||'').trim();
+  const rest=(p.rest||'').trim();
+  if(!name){toast('Falta el nombre','error');return;}
+  if(p.rounds<1){toast('Vueltas inválido','error');return;}
+  if(!rest){toast('Falta descanso','error');return;}
+  const filled=(p.exercise_ids||[]).filter(x=>x);
+  if(filled.length<p.size){toast('Faltan ejercicios','error');return;}
+  if(!coachProfile){toast('Sin sesión','error');return;}
+  const payload={
+    coach_id:coachProfile.id,
+    name,
+    size:p.size,
+    rounds:p.rounds,
+    rest,
+    exercise_ids:filled,
+    updated_at:new Date().toISOString()
+  };
+  let res;
+  if(p.id){
+    res=await sb.from('core_presets').update(payload).eq('id',p.id);
+  } else {
+    res=await sb.from('core_presets').insert(payload);
+  }
+  if(res.error){toast(res.error.message,'error');return;}
+  await loadCorePresets();
+  toast(p.id?'Preset actualizado':'Preset creado','success');
+  openCorePresetPicker(bi);
+}
+
+async function deleteCorePreset(presetId,bi){
+  const p=corePresets.find(x=>x.id===presetId);
+  if(!p) return;
+  if(!confirm(`¿Borrar preset "${p.name}"?`)) return;
+  const {error}=await sb.from('core_presets').delete().eq('id',presetId);
+  if(error){toast(error.message,'error');return;}
+  await loadCorePresets();
+  toast('Preset borrado','success');
+  openCorePresetPicker(bi);
+}
+
+function applyCorePreset(bi,presetId){
+  const p=corePresets.find(x=>x.id===presetId);
+  if(!p){toast('Preset no encontrado','error');return;}
+  if(!editingDayState||!editingDayState.blocks[bi]){toast('Bloque inválido','error');return;}
+  if(!editingDayState.blocks[bi].exercises) editingDayState.blocks[bi].exercises=[];
+  const gid='g'+uid();
+  (p.exercise_ids||[]).forEach(exId=>{
+    const lib=allExercises.find(e=>e.id===exId);
+    const mode=(lib&&lib.track_mode)||'reps';
+    const defReps=mode==='time'?'30 segs':(mode==='reps'?'12-15':'10-12');
+    editingDayState.blocks[bi].exercises.push({
+      id:uid(),
+      exerciseId:exId,
+      sets:p.rounds,
+      reps:defReps,
+      rest:p.rest,
+      objective:'',
+      notes:'',
+      groupId:gid,
+      format:'normal'
+    });
+  });
+  closeModal();
+  renderDayEditor();
+  toast(`✓ "${p.name}" aplicado`,'success');
 }
 
 // Llena un slot vacío (creado top-down) con un ejercicio de la biblioteca.
@@ -2506,7 +2697,7 @@ function removeExercise(bi,ei){
 }
 
 function openAddBlockPicker(){
-  const descs={movilidad:'Entrada en calor, movilidad articular',principal:'Ejercicios compuestos principales',complementario:'Ejercicios accesorios y de aislación',finisher:'Cierre de entrenamiento',custom:'Nombre personalizado'};
+  const descs={movilidad:'Entrada en calor, movilidad articular y core',principal:'Ejercicios compuestos principales',complementario:'Ejercicios accesorios y de aislación',finisher:'Cierre de entrenamiento',custom:'Nombre personalizado'};
   let html=`<div class="fw-800 mb-12" style="font-size:18px">Agregar bloque</div>`;
   Object.entries(BLOCK_TYPES).forEach(([type,bt])=>{
     html+=`<div class="picker-item" onclick="addBlock('${type}')">
@@ -2544,8 +2735,9 @@ function openExPickerForBlock(bi,fillSlotIdx){
   const blockType=editingDayState&&editingDayState.blocks[bi]?editingDayState.blocks[bi].type:null;
   const sorted=[...allExercises].sort((a,b)=>{
     if(blockType==='movilidad'){
-      const am=a.category==='movilidad'?0:1, bm=b.category==='movilidad'?0:1;
-      if(am!==bm) return am-bm;
+      const prio=ex=>ex.category==='movilidad'?0:(ex.category==='core'?1:2);
+      const ap=prio(a), bp=prio(b);
+      if(ap!==bp) return ap-bp;
     } else if(blockType==='principal'){
       const ac=a.category==='compound'?0:1, bc=b.category==='compound'?0:1;
       if(ac!==bc) return ac-bc;

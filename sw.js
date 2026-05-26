@@ -1,4 +1,4 @@
-const CACHE = 'coach-v24';
+const CACHE = 'coach-v25';
 
 self.addEventListener('install', e => {
   e.waitUntil(
