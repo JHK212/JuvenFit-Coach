@@ -1742,7 +1742,7 @@ const FORMAT_META={
   normal:{label:'Biserie',color:'#eab308',textColor:'#a16207',bg:'rgba(234,179,8,0.06)',icon:'🔗',isMetabolic:false},
   amrap :{label:'AMRAP', color:'#ea580c',textColor:'#9a3412',bg:'rgba(234,88,12,0.06)', icon:'🔥',isMetabolic:true},
   emom  :{label:'EMOM',  color:'#2563eb',textColor:'#1d4ed8',bg:'rgba(37,99,235,0.06)', icon:'⏱',isMetabolic:true},
-  core  :{label:'Core',  color:'#7c3aed',textColor:'#5b21b6',bg:'rgba(124,58,237,0.06)',icon:'💪',isMetabolic:false}
+  core  :{label:'Core',  color:'#9F1239',textColor:'#7f1d1d',bg:'rgba(159,18,57,0.06)', icon:'💪',isMetabolic:false}
 };
 // El bloque "biserie/triserie" clásico vive bajo format='normal' (compat).
 function groupFirstEx(exs,gid){return (exs||[]).find(e=>e.groupId===gid)||null;}
@@ -1945,7 +1945,7 @@ function renderBlockHTML(b,bi){
     <button class="btn-out" style="flex:1;min-width:120px;font-size:13px;padding:9px" onclick="openExPickerForBlock(${bi})">+ Ejercicio</button>
     <button class="btn-out" style="flex:1;min-width:120px;font-size:13px;padding:9px;color:#a16207;border-color:#eab308" onclick="openCreateGroupModal(${bi})">🔗 Biserie</button>
     ${showMetabolicBtn?`<button class="btn-out" style="flex:1;min-width:120px;font-size:13px;padding:9px;color:#ea580c;border-color:#ea580c" onclick="openCreateMetabolicModal(${bi})">🔥 AMRAP/EMOM</button>`:''}
-    ${showCoreBtn?`<button class="btn-out" style="flex:1;min-width:120px;font-size:13px;padding:9px;color:#7c3aed;border-color:#7c3aed" onclick="openCorePresetPicker(${bi})">💪 Core preset</button>`:''}
+    ${showCoreBtn?`<button class="btn-out" style="flex:1;min-width:120px;font-size:13px;padding:9px;color:#9F1239;border-color:#9F1239" onclick="openCorePresetPicker(${bi})">💪 Core preset</button>`:''}
   </div>`;
   html+=`</div>`;
   return html;
@@ -2143,13 +2143,13 @@ function openCorePresetPicker(bi){
         </div>
         <div class="text-xs text-mt">${sizeLbl} · ${p.rounds} vuelta${p.rounds===1?'':'s'} · ${p.rest} desc</div>
         <div class="text-xs" style="color:#5A1A1A">${exNames||'<span class="text-mt">sin ejercicios</span>'}</div>
-        <button class="btn" style="padding:9px;font-size:13px;margin-top:4px;background:#7c3aed" onclick="applyCorePreset(${bi},'${p.id}')">Aplicar al bloque</button>
+        <button class="btn" style="padding:9px;font-size:13px;margin-top:4px;background:#9F1239" onclick="applyCorePreset(${bi},'${p.id}')">Aplicar al bloque</button>
       </div>`;
     }).join('');
   } else {
     html+=`<div class="text-sm text-mt center" style="padding:24px 0">Sin presets todavía</div>`;
   }
-  html+=`<button class="btn-out mt-12" style="border-style:dashed;border-color:#7c3aed;color:#7c3aed" onclick="openCorePresetEditor(null,${bi})">+ Nuevo preset</button>`;
+  html+=`<button class="btn-out mt-12" style="border-style:dashed;border-color:#9F1239;color:#9F1239" onclick="openCorePresetEditor(null,${bi})">+ Nuevo preset</button>`;
   html+=`<button class="btn-out mt-8" onclick="closeModal()">Cerrar</button>`;
   $("modal-content").innerHTML=html;$("modal").classList.add('show');
 }
@@ -2220,7 +2220,7 @@ function openPresetSlotPicker(idx,bi){
   html+=`<div style="max-height:55dvh;overflow-y:auto;margin-top:12px">`;
   sorted.forEach(ex=>{
     const muscles=ex.category==='movilidad'?'movilidad':Object.keys(ex.muscle_activation||{}).slice(0,2).map(m=>MUSCLE_LABELS[m]||m).join(' · ');
-    const coreBadge=ex.category==='core'?' · <span style="color:#7c3aed;font-weight:700">CORE</span>':'';
+    const coreBadge=ex.category==='core'?' · <span style="color:#9F1239;font-weight:700">CORE</span>':'';
     html+=`<div class="picker-item preset-pick-item" data-name="${normalizeText(ex.name+' '+(ex.aliases||[]).join(' '))}" onclick="fillPresetSlot(${idx},'${ex.id}',${bi})">
       <div><div class="fw-700 text-sm">${ex.name}</div><div class="text-xs text-mt">${muscles||'—'}${coreBadge}</div></div>
     </div>`;
