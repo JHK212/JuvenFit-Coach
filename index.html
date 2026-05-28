@@ -698,6 +698,11 @@ async function doLogin(){
 async function doLogout(){
   await sb.auth.signOut();
   session=null;coachProfile=null;
+  // Limpiar state que no debe sobrevivir el cambio de coach
+  libraryFilters={level:[],difficulty:[],fatigue:[],restrictions:[],zones:[]};
+  corePresets=[];
+  allRoutines=[];
+  currentAthleteId=null;
   // No borro el email guardado — para que quede prellenado al re-loguearse
   $("login-pass").value='';
   $("bottom-nav").style.display='none';
@@ -2709,10 +2714,12 @@ function renderGroupActionHTML(bi,ei,gi){
   const cur=exs[ei];
   const curMet=isMetabolicFormat(cur.format);
   const nxtMet=nextEx&&isMetabolicFormat(nextEx.format);
+  const curCore=cur.format==='core';
+  const nxtCore=nextEx&&nextEx.format==='core';
   let html=`<div class="mt-12" style="padding-top:10px;border-top:1px dashed var(--bd);display:flex;flex-direction:column;gap:8px">`;
   let renderedAny=false;
   // Botón para sumar el siguiente al grupo — solo si ambos son normales (no mezclar formatos)
-  if(hasNext&&!nextInSameGroup&&!curMet&&!nxtMet){
+  if(hasNext&&!nextInSameGroup&&!curMet&&!nxtMet&&!curCore&&!nxtCore){
     const nextLibEx=nextEx.exerciseId?allExercises.find(e=>e.id===nextEx.exerciseId):null;
     const nextName=nextLibEx?nextLibEx.name:(nextEx.customName||'siguiente');
     let label;
@@ -2743,9 +2750,13 @@ function groupWithNext(bi,ei){
   const exs=editingDayState.blocks[bi].exercises;
   if(ei>=exs.length-1) return;
   const cur=exs[ei], nxt=exs[ei+1];
-  // No mezclar formatos: AMRAP/EMOM no se combinan con biseries normales
+  // No mezclar formatos: AMRAP/EMOM/CORE no se combinan con biseries normales
   if(isMetabolicFormat(cur.format)||isMetabolicFormat(nxt.format)){
     toast('AMRAP/EMOM no se mezclan con biseries normales','error');
+    return;
+  }
+  if(cur.format==='core'||nxt.format==='core'){
+    toast('Los circuitos de core no se mezclan con biseries — editá el preset o desagrupá primero','error');
     return;
   }
   const gid=nxt.groupId||cur.groupId||('g'+uid());
@@ -2793,8 +2804,9 @@ function cleanupSingletonGroups(bi){
     // De acá en adelante hasta fin de array, no debería haber otro con mismo gid
     for(let k=j;k<exs.length;k++){
       if(exs[k].groupId===gid){
-        // grupo no-contiguo → quitamos los más allá
+        // grupo no-contiguo → quitamos los más allá. Si era core, resetear format y config.
         delete exs[k].groupId;
+        if(exs[k].format==='core'){exs[k].format='normal';delete exs[k].formatConfig;}
       }
     }
     i=j;
