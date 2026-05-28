@@ -1,0 +1,158 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>JuvenFit · Clasificación inicial de ejercicios</title>
+<style>
+  :root{
+    --tx:#1a1a1a;--mt:#6b6b6b;--bd:#dad6cf;--bg:#fafaf7;--ac:#5A1A1A;
+    --gn:#16a34a;--yw:#ca8a04;--dn:#dc2626;
+    --principiante:#16a34a;--intermedio:#ca8a04;--avanzado:#dc2626;
+    --baja:#16a34a;--media:#ca8a04;--alta:#dc2626;
+  }
+  *{box-sizing:border-box;-webkit-print-color-adjust:exact;print-color-adjust:exact}
+  html,body{margin:0;padding:0;background:var(--bg);color:var(--tx);font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif;font-size:13px;line-height:1.4}
+  .page{max-width:980px;margin:0 auto;padding:32px 28px}
+  header{border-bottom:1.5px solid var(--tx);padding-bottom:18px;margin-bottom:24px}
+  h1{margin:0 0 6px;font-size:26px;font-weight:800;letter-spacing:-0.5px}
+  .sub{font-size:13px;color:var(--mt);font-weight:500}
+  .meta{font-family:ui-monospace,'SF Mono','Cascadia Code',Consolas,monospace;font-size:10.5px;letter-spacing:1.5px;text-transform:uppercase;color:var(--ac);font-weight:700;margin-top:8px}
+  table{width:100%;border-collapse:collapse;margin-top:8px}
+  th,td{border-bottom:1px solid var(--bd);padding:9px 8px;text-align:left;vertical-align:top;font-size:12.5px}
+  th{background:#ece8e0;font-family:ui-monospace,'SF Mono',Consolas,monospace;font-size:10px;letter-spacing:1.2px;text-transform:uppercase;font-weight:700;color:var(--ac);border-bottom:1.5px solid var(--ac)}
+  tr:nth-child(even) td{background:rgba(0,0,0,0.015)}
+  .name{font-weight:600;color:var(--tx)}
+  .tag{display:inline-block;padding:2px 8px;border-radius:4px;font-family:ui-monospace,'SF Mono',Consolas,monospace;font-size:10px;font-weight:700;letter-spacing:0.5px;text-transform:uppercase;color:#fff}
+  .tag-principiante{background:var(--principiante)}
+  .tag-intermedio{background:var(--intermedio)}
+  .tag-avanzado{background:var(--avanzado)}
+  .tag-baja{background:var(--baja)}
+  .tag-media{background:var(--media)}
+  .tag-alta{background:var(--alta)}
+  .restr{font-family:ui-monospace,'SF Mono',Consolas,monospace;font-size:10.5px;color:var(--mt);line-height:1.5}
+  .restr-chip{display:inline-block;background:#f0ece5;border:1px solid var(--bd);padding:1px 6px;border-radius:3px;margin:1px 2px 1px 0;color:var(--ac);font-weight:600}
+  .none{color:#bbb;font-style:italic}
+  h2{margin:32px 0 12px;font-size:16px;font-weight:700;letter-spacing:-0.2px;border-bottom:1px dashed var(--bd);padding-bottom:6px}
+  .legend{display:grid;grid-template-columns:repeat(2,1fr);gap:16px;font-size:12px;color:var(--tx);line-height:1.55;margin-top:12px}
+  .legend strong{color:var(--ac)}
+  footer{margin-top:36px;padding-top:14px;border-top:1px solid var(--bd);font-size:11px;color:var(--mt);text-align:center;font-family:ui-monospace,'SF Mono',Consolas,monospace;letter-spacing:0.5px}
+  @media print {
+    body{background:#fff;font-size:11px}
+    .page{padding:0;max-width:none}
+    table{page-break-inside:auto}
+    tr{page-break-inside:avoid;page-break-after:auto}
+    thead{display:table-header-group}
+    h2{page-break-after:avoid}
+    .legend{page-break-inside:avoid}
+  }
+  @media (max-width:600px){
+    .page{padding:16px}
+    th,td{padding:7px 5px;font-size:11.5px}
+    h1{font-size:21px}
+    .legend{grid-template-columns:1fr}
+  }
+</style>
+</head>
+<body>
+<div class="page">
+
+<header>
+  <div class="meta">JuvenFit · Biblioteca de ejercicios</div>
+  <h1>Clasificación inicial</h1>
+  <div class="sub">Propuesta para revisión del equipo de coaches. Cada ejercicio clasificado por Nivel, Dificultad técnica, Fatiga y Restricciones (lesiones que desaconsejan el ejercicio).</div>
+</header>
+
+<h2>Tabla de clasificación</h2>
+<table>
+  <thead>
+    <tr>
+      <th style="width:30%">Ejercicio</th>
+      <th style="width:14%">Nivel</th>
+      <th style="width:12%">Dificultad</th>
+      <th style="width:12%">Fatiga</th>
+      <th style="width:32%">Restricciones</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr><td class="name">Sentadilla con barra</td><td><span class="tag tag-intermedio">intermedio</span></td><td><span class="tag tag-alta">alta</span></td><td><span class="tag tag-alta">alta</span></td><td class="restr"><span class="restr-chip">lumbar</span><span class="restr-chip">rodilla</span><span class="restr-chip">movilidad limitada</span></td></tr>
+    <tr><td class="name">Peso muerto</td><td><span class="tag tag-avanzado">avanzado</span></td><td><span class="tag tag-alta">alta</span></td><td><span class="tag tag-alta">alta</span></td><td class="restr"><span class="restr-chip">lumbar</span><span class="restr-chip">movilidad limitada</span></td></tr>
+    <tr><td class="name">Peso muerto mancuernas</td><td><span class="tag tag-intermedio">intermedio</span></td><td><span class="tag tag-media">media</span></td><td><span class="tag tag-alta">alta</span></td><td class="restr"><span class="restr-chip">lumbar</span></td></tr>
+    <tr><td class="name">Peso muerto rumano</td><td><span class="tag tag-intermedio">intermedio</span></td><td><span class="tag tag-alta">alta</span></td><td><span class="tag tag-alta">alta</span></td><td class="restr"><span class="restr-chip">lumbar</span></td></tr>
+    <tr><td class="name">Hip thrust</td><td><span class="tag tag-intermedio">intermedio</span></td><td><span class="tag tag-media">media</span></td><td><span class="tag tag-alta">alta</span></td><td class="restr"><span class="restr-chip">lumbar</span></td></tr>
+    <tr><td class="name">Búlgaras</td><td><span class="tag tag-avanzado">avanzado</span></td><td><span class="tag tag-alta">alta</span></td><td><span class="tag tag-alta">alta</span></td><td class="restr"><span class="restr-chip">rodilla</span></td></tr>
+    <tr><td class="name">Step up</td><td><span class="tag tag-principiante">principiante</span></td><td><span class="tag tag-baja">baja</span></td><td><span class="tag tag-media">media</span></td><td class="restr"><span class="restr-chip">rodilla</span></td></tr>
+    <tr><td class="name">Gemelos de pie</td><td><span class="tag tag-principiante">principiante</span></td><td><span class="tag tag-baja">baja</span></td><td><span class="tag tag-baja">baja</span></td><td class="restr"><span class="none">—</span></td></tr>
+    <tr><td class="name">Press banca plano</td><td><span class="tag tag-intermedio">intermedio</span></td><td><span class="tag tag-media">media</span></td><td><span class="tag tag-media">media</span></td><td class="restr"><span class="restr-chip">hombro</span></td></tr>
+    <tr><td class="name">Press banca mancuernas</td><td><span class="tag tag-intermedio">intermedio</span></td><td><span class="tag tag-media">media</span></td><td><span class="tag tag-media">media</span></td><td class="restr"><span class="restr-chip">hombro</span></td></tr>
+    <tr><td class="name">Press inclinado barra</td><td><span class="tag tag-intermedio">intermedio</span></td><td><span class="tag tag-media">media</span></td><td><span class="tag tag-media">media</span></td><td class="restr"><span class="restr-chip">hombro</span></td></tr>
+    <tr><td class="name">Press inclinado mancuernas</td><td><span class="tag tag-intermedio">intermedio</span></td><td><span class="tag tag-media">media</span></td><td><span class="tag tag-media">media</span></td><td class="restr"><span class="restr-chip">hombro</span></td></tr>
+    <tr><td class="name">Press militar</td><td><span class="tag tag-avanzado">avanzado</span></td><td><span class="tag tag-alta">alta</span></td><td><span class="tag tag-alta">alta</span></td><td class="restr"><span class="restr-chip">hombro</span><span class="restr-chip">lumbar</span><span class="restr-chip">movilidad limitada</span></td></tr>
+    <tr><td class="name">Press mancuernas sentado</td><td><span class="tag tag-intermedio">intermedio</span></td><td><span class="tag tag-media">media</span></td><td><span class="tag tag-media">media</span></td><td class="restr"><span class="restr-chip">hombro</span></td></tr>
+    <tr><td class="name">Flexiones</td><td><span class="tag tag-principiante">principiante</span></td><td><span class="tag tag-baja">baja</span></td><td><span class="tag tag-media">media</span></td><td class="restr"><span class="restr-chip">hombro</span></td></tr>
+    <tr><td class="name">Fondos en paralelas</td><td><span class="tag tag-avanzado">avanzado</span></td><td><span class="tag tag-alta">alta</span></td><td><span class="tag tag-alta">alta</span></td><td class="restr"><span class="restr-chip">hombro</span></td></tr>
+    <tr><td class="name">Aperturas banco plano</td><td><span class="tag tag-intermedio">intermedio</span></td><td><span class="tag tag-media">media</span></td><td><span class="tag tag-media">media</span></td><td class="restr"><span class="restr-chip">hombro</span></td></tr>
+    <tr><td class="name">Remo con barra</td><td><span class="tag tag-intermedio">intermedio</span></td><td><span class="tag tag-media">media</span></td><td><span class="tag tag-media">media</span></td><td class="restr"><span class="restr-chip">lumbar</span></td></tr>
+    <tr><td class="name">Remo con mancuerna</td><td><span class="tag tag-principiante">principiante</span></td><td><span class="tag tag-baja">baja</span></td><td><span class="tag tag-media">media</span></td><td class="restr"><span class="restr-chip">lumbar</span></td></tr>
+    <tr><td class="name">Remo australiano</td><td><span class="tag tag-intermedio">intermedio</span></td><td><span class="tag tag-media">media</span></td><td><span class="tag tag-media">media</span></td><td class="restr"><span class="none">—</span></td></tr>
+    <tr><td class="name">Dominadas</td><td><span class="tag tag-avanzado">avanzado</span></td><td><span class="tag tag-alta">alta</span></td><td><span class="tag tag-alta">alta</span></td><td class="restr"><span class="restr-chip">hombro</span><span class="restr-chip">movilidad limitada</span></td></tr>
+    <tr><td class="name">Face pull (banda)</td><td><span class="tag tag-principiante">principiante</span></td><td><span class="tag tag-baja">baja</span></td><td><span class="tag tag-baja">baja</span></td><td class="restr"><span class="none">—</span></td></tr>
+    <tr><td class="name">Pájaros</td><td><span class="tag tag-principiante">principiante</span></td><td><span class="tag tag-baja">baja</span></td><td><span class="tag tag-baja">baja</span></td><td class="restr"><span class="none">—</span></td></tr>
+    <tr><td class="name">Elevaciones laterales</td><td><span class="tag tag-principiante">principiante</span></td><td><span class="tag tag-baja">baja</span></td><td><span class="tag tag-baja">baja</span></td><td class="restr"><span class="restr-chip">hombro</span></td></tr>
+    <tr><td class="name">Elevaciones frontales</td><td><span class="tag tag-principiante">principiante</span></td><td><span class="tag tag-baja">baja</span></td><td><span class="tag tag-baja">baja</span></td><td class="restr"><span class="restr-chip">hombro</span></td></tr>
+    <tr><td class="name">Encogimientos</td><td><span class="tag tag-principiante">principiante</span></td><td><span class="tag tag-baja">baja</span></td><td><span class="tag tag-baja">baja</span></td><td class="restr"><span class="none">—</span></td></tr>
+    <tr><td class="name">Curl con barra</td><td><span class="tag tag-principiante">principiante</span></td><td><span class="tag tag-baja">baja</span></td><td><span class="tag tag-baja">baja</span></td><td class="restr"><span class="none">—</span></td></tr>
+    <tr><td class="name">Curl alternado mancuernas</td><td><span class="tag tag-principiante">principiante</span></td><td><span class="tag tag-baja">baja</span></td><td><span class="tag tag-baja">baja</span></td><td class="restr"><span class="none">—</span></td></tr>
+    <tr><td class="name">Curl martillo</td><td><span class="tag tag-principiante">principiante</span></td><td><span class="tag tag-baja">baja</span></td><td><span class="tag tag-baja">baja</span></td><td class="restr"><span class="none">—</span></td></tr>
+    <tr><td class="name">Extensión de tríceps</td><td><span class="tag tag-principiante">principiante</span></td><td><span class="tag tag-baja">baja</span></td><td><span class="tag tag-baja">baja</span></td><td class="restr"><span class="restr-chip">hombro</span></td></tr>
+    <tr><td class="name">Rompecráneo</td><td><span class="tag tag-intermedio">intermedio</span></td><td><span class="tag tag-media">media</span></td><td><span class="tag tag-baja">baja</span></td><td class="restr"><span class="restr-chip">hombro</span></td></tr>
+    <tr><td class="name">Press francés</td><td><span class="tag tag-intermedio">intermedio</span></td><td><span class="tag tag-media">media</span></td><td><span class="tag tag-baja">baja</span></td><td class="restr"><span class="restr-chip">hombro</span></td></tr>
+    <tr><td class="name">Patada de tríceps</td><td><span class="tag tag-principiante">principiante</span></td><td><span class="tag tag-baja">baja</span></td><td><span class="tag tag-baja">baja</span></td><td class="restr"><span class="none">—</span></td></tr>
+    <tr><td class="name">Plancha</td><td><span class="tag tag-principiante">principiante</span></td><td><span class="tag tag-baja">baja</span></td><td><span class="tag tag-media">media</span></td><td class="restr"><span class="none">—</span></td></tr>
+    <tr><td class="name">Plancha lateral</td><td><span class="tag tag-intermedio">intermedio</span></td><td><span class="tag tag-media">media</span></td><td><span class="tag tag-media">media</span></td><td class="restr"><span class="restr-chip">hombro</span></td></tr>
+    <tr><td class="name">Abdominales</td><td><span class="tag tag-principiante">principiante</span></td><td><span class="tag tag-baja">baja</span></td><td><span class="tag tag-media">media</span></td><td class="restr"><span class="restr-chip">lumbar</span></td></tr>
+    <tr><td class="name">Elevaciones de piernas</td><td><span class="tag tag-intermedio">intermedio</span></td><td><span class="tag tag-media">media</span></td><td><span class="tag tag-media">media</span></td><td class="restr"><span class="restr-chip">lumbar</span></td></tr>
+  </tbody>
+</table>
+
+<h2>Criterios usados</h2>
+<div class="legend">
+  <div>
+    <strong>Nivel</strong><br>
+    <span style="color:var(--principiante);font-weight:700">Principiante</span> · bodyweight básico, aislación pura, máquinas guiadas.<br>
+    <span style="color:var(--intermedio);font-weight:700">Intermedio</span> · compuestos con mancuernas / barra básicos.<br>
+    <span style="color:var(--avanzado);font-weight:700">Avanzado</span> · alta carga + skill (PM, dominadas, búlgaras, militar, fondos).
+  </div>
+  <div>
+    <strong>Dificultad técnica</strong> (no carga, ejecución técnica del movimiento)<br>
+    <span style="color:var(--baja);font-weight:700">Baja</span> · aislación, máquinas.<br>
+    <span style="color:var(--media);font-weight:700">Media</span> · compuestos con mancuernas.<br>
+    <span style="color:var(--alta);font-weight:700">Alta</span> · PM, sentadilla barra, militar, búlgaras.
+  </div>
+  <div>
+    <strong>Fatiga</strong> (sistémica, no muscular local)<br>
+    <span style="color:var(--baja);font-weight:700">Baja</span> · aislación, brazos, planchas.<br>
+    <span style="color:var(--media);font-weight:700">Media</span> · compuestos secundarios.<br>
+    <span style="color:var(--alta);font-weight:700">Alta</span> · PM, sentadilla, militar, dominadas, fondos, hip thrust.
+  </div>
+  <div>
+    <strong>Restricciones</strong> (lesiones que desaconsejan el ejercicio)<br>
+    <span style="color:var(--ac);font-weight:700">lumbar</span> · cualquier ejercicio que cargue la columna.<br>
+    <span style="color:var(--ac);font-weight:700">hombro</span> · presses, dominadas, aperturas, fondos, elevaciones.<br>
+    <span style="color:var(--ac);font-weight:700">rodilla</span> · sentadilla barra, búlgaras, step-up.<br>
+    <span style="color:var(--ac);font-weight:700">movilidad limitada</span> · PM, sentadilla profunda, dominadas, militar.
+  </div>
+</div>
+
+<h2>Cómo se usa el filtro de restricciones</h2>
+<div style="font-size:12.5px;color:var(--tx);line-height:1.55">
+  En la biblioteca del Coach, al filtrar por <strong>"Evitar para: lumbar"</strong>, la app <strong>oculta</strong> los ejercicios marcados con esa restricción. Sirve para armar rutinas en alumnos lesionados: te muestra solo lo que es seguro para esa persona.
+</div>
+
+<footer>
+  JuvenFit · Generado para revisión · Modificá lo que no coincida con tu criterio y devolvé la lista.
+</footer>
+
+</div>
+</body>
+</html>
