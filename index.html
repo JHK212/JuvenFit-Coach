@@ -1742,7 +1742,7 @@ const FORMAT_META={
   normal:{label:'Biserie',color:'#eab308',textColor:'#a16207',bg:'rgba(234,179,8,0.06)',icon:'🔗',isMetabolic:false},
   amrap :{label:'AMRAP', color:'#ea580c',textColor:'#9a3412',bg:'rgba(234,88,12,0.06)', icon:'🔥',isMetabolic:true},
   emom  :{label:'EMOM',  color:'#2563eb',textColor:'#1d4ed8',bg:'rgba(37,99,235,0.06)', icon:'⏱',isMetabolic:true},
-  core  :{label:'Core',  color:'#9F1239',textColor:'#7f1d1d',bg:'rgba(159,18,57,0.06)', icon:'💪',isMetabolic:false}
+  core  :{label:'Core',  color:'#D7793E',textColor:'#9A4A1F',bg:'rgba(215,121,62,0.06)',icon:'',  isMetabolic:false}
 };
 // El bloque "biserie/triserie" clásico vive bajo format='normal' (compat).
 function groupFirstEx(exs,gid){return (exs||[]).find(e=>e.groupId===gid)||null;}
@@ -1767,7 +1767,7 @@ function formatGroupLabel(exs,gid,groupSize){
     const n=first.sets||cfg.rounds||'?';
     const rest=first.rest||cfg.rest||'';
     const pn=cfg.presetName?` · ${cfg.presetName}`:'';
-    return `${meta.icon} CORE${pn} · ${n} vuelta${n===1?'':'s'}`+(rest?` · ${rest} desc`:'')+(groupSize>1?` · ${groupSize} ej.`:'');
+    return `CORE${pn} · ${n} vuelta${n===1?'':'s'}`+(rest?` · ${rest} desc`:'')+(groupSize>1?` · ${groupSize} ej.`:'');
   }
   return `${meta.icon} ${groupTerm(groupSize)}`;
 }
@@ -1945,7 +1945,7 @@ function renderBlockHTML(b,bi){
     <button class="btn-out" style="flex:1;min-width:120px;font-size:13px;padding:9px" onclick="openExPickerForBlock(${bi})">+ Ejercicio</button>
     <button class="btn-out" style="flex:1;min-width:120px;font-size:13px;padding:9px;color:#a16207;border-color:#eab308" onclick="openCreateGroupModal(${bi})">🔗 Biserie</button>
     ${showMetabolicBtn?`<button class="btn-out" style="flex:1;min-width:120px;font-size:13px;padding:9px;color:#ea580c;border-color:#ea580c" onclick="openCreateMetabolicModal(${bi})">🔥 AMRAP/EMOM</button>`:''}
-    ${showCoreBtn?`<button class="btn-out" style="flex:1;min-width:120px;font-size:13px;padding:9px;color:#9F1239;border-color:#9F1239" onclick="openCorePresetPicker(${bi})">💪 Core preset</button>`:''}
+    ${showCoreBtn?`<button class="btn-out" style="flex:1;min-width:120px;font-size:13px;padding:9px;color:#D7793E;border-color:#D7793E" onclick="openCorePresetPicker(${bi})">Core preset</button>`:''}
   </div>`;
   html+=`</div>`;
   return html;
@@ -2129,27 +2129,28 @@ function confirmCreateMetabolic(bi){
 
 // ══ CORE PRESETS — triseries reusables de abdominales ══
 function openCorePresetPicker(bi){
-  let html=`<div class="fw-800 mb-4" style="font-size:18px">💪 Presets de Core</div>`;
+  let html=`<div class="fw-800 mb-4" style="font-size:18px">Presets de Core</div>`;
   html+=`<div class="text-sm text-mt mb-16">Circuitos de abdominales reusables. Tocá un preset para aplicarlo al bloque actual.</div>`;
   if(corePresets.length){
     html+=corePresets.map(p=>{
       const exNames=(p.exercise_ids||[]).map(id=>{const ex=allExercises.find(e=>e.id===id);return ex?ex.name:id;}).join(' · ');
       const sizeLbl=p.size===2?'Biserie':(p.size===3?'Triserie':`×${p.size}`);
+      const dur=p.duration_secs||30;
       return `<div class="picker-item" style="flex-direction:column;align-items:stretch;gap:6px;cursor:default">
         <div class="row" style="align-items:center;gap:8px">
           <span class="fw-700" style="flex:1">${p.name}</span>
           <span class="micro-btn" title="Editar" onclick="openCorePresetEditor('${p.id}',${bi})">✎</span>
           <span class="micro-btn" style="color:var(--dn)" title="Borrar" onclick="deleteCorePreset('${p.id}',${bi})">✕</span>
         </div>
-        <div class="text-xs text-mt">${sizeLbl} · ${p.rounds} vuelta${p.rounds===1?'':'s'} · ${p.rest} desc</div>
+        <div class="text-xs text-mt">${sizeLbl} · ${dur}s × ${p.rounds} vuelta${p.rounds===1?'':'s'} · ${p.rest} desc</div>
         <div class="text-xs" style="color:#5A1A1A">${exNames||'<span class="text-mt">sin ejercicios</span>'}</div>
-        <button class="btn" style="padding:9px;font-size:13px;margin-top:4px;background:#9F1239" onclick="applyCorePreset(${bi},'${p.id}')">Aplicar al bloque</button>
+        <button class="btn" style="padding:9px;font-size:13px;margin-top:4px;background:#D7793E" onclick="applyCorePreset(${bi},'${p.id}')">Aplicar al bloque</button>
       </div>`;
     }).join('');
   } else {
     html+=`<div class="text-sm text-mt center" style="padding:24px 0">Sin presets todavía</div>`;
   }
-  html+=`<button class="btn-out mt-12" style="border-style:dashed;border-color:#9F1239;color:#9F1239" onclick="openCorePresetEditor(null,${bi})">+ Nuevo preset</button>`;
+  html+=`<button class="btn-out mt-12" style="border-style:dashed;border-color:#D7793E;color:#D7793E" onclick="openCorePresetEditor(null,${bi})">+ Nuevo preset</button>`;
   html+=`<button class="btn-out mt-8" onclick="closeModal()">Cerrar</button>`;
   $("modal-content").innerHTML=html;$("modal").classList.add('show');
 }
@@ -2158,9 +2159,9 @@ function openCorePresetEditor(presetId,bi){
   if(presetId){
     const p=corePresets.find(x=>x.id===presetId);
     if(!p){toast('Preset no encontrado','error');return;}
-    editingPreset={id:p.id,name:p.name,size:p.size,rounds:p.rounds,rest:p.rest,exercise_ids:[...(p.exercise_ids||[])]};
+    editingPreset={id:p.id,name:p.name,size:p.size,rounds:p.rounds,rest:p.rest,duration_secs:p.duration_secs||30,exercise_ids:[...(p.exercise_ids||[])]};
   } else {
-    editingPreset={id:null,name:'',size:3,rounds:3,rest:'60 segs',exercise_ids:[]};
+    editingPreset={id:null,name:'',size:3,rounds:3,rest:'60 segs',duration_secs:30,exercise_ids:[]};
   }
   renderCorePresetEditor(bi);
 }
@@ -2171,6 +2172,7 @@ function renderCorePresetEditor(bi){
   const p=editingPreset;
   const escName=(p.name||'').replace(/"/g,'&quot;');
   const escRest=(p.rest||'').replace(/"/g,'&quot;');
+  const dur=p.duration_secs||30;
   let html=`<div class="fw-800 mb-12" style="font-size:18px">${p.id?'✎ Editar':'+ Nuevo'} preset de Core</div>`;
   html+=`<label class="label">Nombre</label>`;
   html+=`<input class="input mb-12" placeholder="Ej: Core básico" value="${escName}" oninput="editingPreset.name=this.value">`;
@@ -2179,6 +2181,10 @@ function renderCorePresetEditor(bi){
       <button class="radio-btn${p.size===2?' active':''}" onclick="setPresetSize(2,${bi})">Biserie</button>
       <button class="radio-btn${p.size===3?' active':''}" onclick="setPresetSize(3,${bi})">Triserie</button>
       <button class="radio-btn${p.size===4?' active':''}" onclick="setPresetSize(4,${bi})">×4</button>
+    </div>`;
+  html+=`<label class="label">Tiempo por ejercicio <span class="text-mt" style="font-weight:400">(se aplica a todos los ej. del circuito)</span></label>
+    <div class="radio-group mb-12" style="flex-wrap:wrap">
+      ${[15,20,30,45,60,90,120].map(s=>`<button class="radio-btn${dur===s?' active':''}" onclick="setPresetDuration(${s},${bi})">${s<60?s+'s':(s/60)+'m'}</button>`).join('')}
     </div>`;
   html+=`<div class="flex gap-12 mb-12">
     <div style="flex:1"><label class="label">Vueltas</label><input type="number" class="input input-num" min="1" max="20" inputmode="numeric" value="${p.rounds}" oninput="editingPreset.rounds=Math.max(1,parseInt(this.value)||1)"></div>
@@ -2204,6 +2210,11 @@ function setPresetSize(size,bi){
   renderCorePresetEditor(bi);
 }
 
+function setPresetDuration(secs,bi){
+  editingPreset.duration_secs=secs;
+  renderCorePresetEditor(bi);
+}
+
 function clearPresetSlot(idx,bi){
   editingPreset.exercise_ids[idx]=null;
   renderCorePresetEditor(bi);
@@ -2220,7 +2231,7 @@ function openPresetSlotPicker(idx,bi){
   html+=`<div style="max-height:55dvh;overflow-y:auto;margin-top:12px">`;
   sorted.forEach(ex=>{
     const muscles=ex.category==='movilidad'?'movilidad':Object.keys(ex.muscle_activation||{}).slice(0,2).map(m=>MUSCLE_LABELS[m]||m).join(' · ');
-    const coreBadge=ex.category==='core'?' · <span style="color:#9F1239;font-weight:700">CORE</span>':'';
+    const coreBadge=ex.category==='core'?' · <span style="color:#D7793E;font-weight:700">CORE</span>':'';
     html+=`<div class="picker-item preset-pick-item" data-name="${normalizeText(ex.name+' '+(ex.aliases||[]).join(' '))}" onclick="fillPresetSlot(${idx},'${ex.id}',${bi})">
       <div><div class="fw-700 text-sm">${ex.name}</div><div class="text-xs text-mt">${muscles||'—'}${coreBadge}</div></div>
     </div>`;
@@ -2244,12 +2255,14 @@ async function saveCorePreset(bi){
   const filled=(p.exercise_ids||[]).filter(x=>x);
   if(filled.length<p.size){toast('Faltan ejercicios','error');return;}
   if(!coachProfile){toast('Sin sesión','error');return;}
+  const duration_secs=Math.max(5,Math.min(600,parseInt(p.duration_secs)||30));
   const payload={
     coach_id:coachProfile.id,
     name,
     size:p.size,
     rounds:p.rounds,
     rest,
+    duration_secs,
     exercise_ids:filled,
     updated_at:new Date().toISOString()
   };
@@ -2282,16 +2295,16 @@ function applyCorePreset(bi,presetId){
   if(!editingDayState||!editingDayState.blocks[bi]){toast('Bloque inválido','error');return;}
   if(!editingDayState.blocks[bi].exercises) editingDayState.blocks[bi].exercises=[];
   const gid='g'+uid();
-  const cfg={presetName:p.name,rounds:p.rounds,rest:p.rest};
+  const dur=p.duration_secs||30;
+  const cfg={presetName:p.name,rounds:p.rounds,rest:p.rest,duration_secs:dur};
+  // Todos los ej. del circuito se ejecutan por tiempo uniforme (decisión del profe).
+  const repsLbl=`${dur} segs`;
   (p.exercise_ids||[]).forEach(exId=>{
-    const lib=allExercises.find(e=>e.id===exId);
-    const mode=(lib&&lib.track_mode)||'reps';
-    const defReps=mode==='time'?'30 segs':(mode==='reps'?'12-15':'10-12');
     editingDayState.blocks[bi].exercises.push({
       id:uid(),
       exerciseId:exId,
       sets:p.rounds,
-      reps:defReps,
+      reps:repsLbl,
       rest:p.rest,
       objective:'',
       notes:'',
