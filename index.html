@@ -265,6 +265,7 @@ textarea.xfl-inp{resize:none;min-height:48px;font-size:14px;}
       <span class="pill" data-filter="aislacion" onclick="setFilter('aislacion')">Aislación</span>
       <span class="pill" data-filter="core" onclick="setFilter('core')">Core</span>
       <span class="pill" data-filter="movilidad" onclick="setFilter('movilidad')">Movilidad</span>
+      <span class="pill" id="adv-filter-btn" onclick="openAdvancedFiltersModal()" style="border-style:dashed">≡ Filtros<span id="adv-filter-count"></span></span>
     </div>
 
     <div id="ex-count" class="text-xs text-mt mb-12"></div>
@@ -403,11 +404,11 @@ textarea.xfl-inp{resize:none;min-height:48px;font-size:14px;}
       <label class="label">Etapa</label>
       <div class="radio-group">
         <button class="radio-btn" data-phase="adaptacion" onclick="setRoutinePhase('adaptacion')">Adaptación</button>
-        <button class="radio-btn" data-phase="progresion" onclick="setRoutinePhase('progresion')">Progresión</button>
+        <button class="radio-btn" data-phase="reacondicionamiento" onclick="setRoutinePhase('reacondicionamiento')">Reacondicionamiento</button>
       </div>
       <div class="radio-group mt-8">
-        <button class="radio-btn" data-phase="descarga" onclick="setRoutinePhase('descarga')">Descarga</button>
-        <button class="radio-btn" data-phase="mantenimiento" onclick="setRoutinePhase('mantenimiento')">Mantenimiento</button>
+        <button class="radio-btn" data-phase="progresion" onclick="setRoutinePhase('progresion')">Progresión</button>
+        <button class="radio-btn" data-phase="rendimiento" onclick="setRoutinePhase('rendimiento')">Rendimiento</button>
       </div>
     </div>
 
@@ -515,7 +516,7 @@ textarea.xfl-inp{resize:none;min-height:48px;font-size:14px;}
     </div>
 
     <div class="mb-16">
-      <label class="label">Patrón de movimiento</label>
+      <label class="label">Subcategoría</label>
       <select id="ed-movement" class="input">
         <option value="">— Elegir —</option>
         <option value="empuje_horizontal">Empuje horizontal</option>
@@ -524,10 +525,42 @@ textarea.xfl-inp{resize:none;min-height:48px;font-size:14px;}
         <option value="traccion_vertical">Tracción vertical</option>
         <option value="sentadilla">Sentadilla</option>
         <option value="bisagra">Bisagra (hinge)</option>
-        <option value="zancada">Zancada</option>
+        <option value="zancada">Zancada (unilateral)</option>
         <option value="aislacion">Aislación</option>
         <option value="core">Core</option>
       </select>
+    </div>
+
+    <div class="mb-16">
+      <label class="label">Nivel</label>
+      <div class="radio-group">
+        <button class="radio-btn" data-level="principiante" onclick="setEditorLevel('principiante')">Principiante</button>
+        <button class="radio-btn" data-level="intermedio" onclick="setEditorLevel('intermedio')">Intermedio</button>
+        <button class="radio-btn" data-level="avanzado" onclick="setEditorLevel('avanzado')">Avanzado</button>
+      </div>
+    </div>
+
+    <div class="mb-16">
+      <label class="label">Dificultad técnica</label>
+      <div class="radio-group">
+        <button class="radio-btn" data-diff="baja" onclick="setEditorDifficulty('baja')">Baja</button>
+        <button class="radio-btn" data-diff="media" onclick="setEditorDifficulty('media')">Media</button>
+        <button class="radio-btn" data-diff="alta" onclick="setEditorDifficulty('alta')">Alta</button>
+      </div>
+    </div>
+
+    <div class="mb-16">
+      <label class="label">Fatiga</label>
+      <div class="radio-group">
+        <button class="radio-btn" data-fat="baja" onclick="setEditorFatigue('baja')">Baja</button>
+        <button class="radio-btn" data-fat="media" onclick="setEditorFatigue('media')">Media</button>
+        <button class="radio-btn" data-fat="alta" onclick="setEditorFatigue('alta')">Alta</button>
+      </div>
+    </div>
+
+    <div class="mb-16">
+      <label class="label">Restricciones <span class="text-mt" style="font-weight:400">(lesiones que desaconsejan el ejercicio)</span></label>
+      <div id="ed-restrictions" class="chips"></div>
     </div>
 
     <div class="mb-16">
@@ -553,7 +586,7 @@ textarea.xfl-inp{resize:none;min-height:48px;font-size:14px;}
     </div>
 
     <div class="sec">
-      <label class="label">Cues / instrucciones</label>
+      <label class="label">Notas técnicas</label>
       <textarea id="ed-cues" class="input" placeholder="Ej: Escápulas juntas, arco lumbar natural..." maxlength="280"></textarea>
       <div class="text-xs text-mt mt-4 center"><span id="cues-count">0</span>/280</div>
     </div>
@@ -612,6 +645,11 @@ let session=null;
 let coachProfile=null;
 let allExercises=[];
 let currentFilter='all';
+// Filtros avanzados de la biblioteca · combinables, AND entre dimensiones, OR dentro
+let libraryFilters={level:[],difficulty:[],fatigue:[],restrictions:[],zones:[]};
+// Restricciones predefinidas (el coach puede agregar custom)
+const RESTRICTION_PRESETS=['lumbar','hombro','rodilla','movilidad_limitada'];
+const RESTRICTION_LABELS={lumbar:'Lumbar',hombro:'Hombro',rodilla:'Rodilla',movilidad_limitada:'Movilidad limitada'};
 let editingExercise=null; // null = creando nuevo, objeto = editando
 let editorState=null;     // estado del editor mientras se edita
 let allAthletes=[];
@@ -763,10 +801,59 @@ async function loadExercises(){
   allExercises=data;
   renderList();
 }
-function setFilter(f){currentFilter=f;document.querySelectorAll('.pill').forEach(p=>p.classList.toggle('active',p.dataset.filter===f));renderList();}
+function setFilter(f){currentFilter=f;document.querySelectorAll('.pill[data-filter]').forEach(p=>p.classList.toggle('active',p.dataset.filter===f));renderList();}
+
+function openAdvancedFiltersModal(){
+  const dims=[
+    {key:'level',title:'Nivel',options:[['principiante','Principiante'],['intermedio','Intermedio'],['avanzado','Avanzado']]},
+    {key:'difficulty',title:'Dificultad técnica',options:[['baja','Baja'],['media','Media'],['alta','Alta']]},
+    {key:'fatigue',title:'Fatiga',options:[['baja','Baja'],['media','Media'],['alta','Alta']]},
+    {key:'restrictions',title:'Evitar para (lesiones)',options:RESTRICTION_PRESETS.map(r=>[r,RESTRICTION_LABELS[r]||r]),help:'Oculta ejercicios marcados con esta restricción.'},
+    {key:'zones',title:'Zona muscular',options:Object.keys(BODY_ZONES).map(z=>[z,z])}
+  ];
+  let html=`<div class="fw-800 mb-12" style="font-size:18px">Filtros</div>`;
+  html+=`<div class="text-sm text-mt mb-16">Combinables. Dentro de un grupo, los chips suman (OR). Entre grupos, todos deben matchear (AND).</div>`;
+  dims.forEach(d=>{
+    html+=`<div class="mb-16">
+      <label class="label">${d.title}</label>
+      <div class="chips">${d.options.map(([v,lbl])=>{
+        const active=libraryFilters[d.key].includes(v);
+        return `<span class="chip${active?'':' chip-add'}" style="cursor:pointer" onclick="toggleAdvFilter('${d.key}','${v}')">${lbl}${active?' ✓':''}</span>`;
+      }).join('')}</div>
+      ${d.help?`<div class="text-xs text-mt mt-4">${d.help}</div>`:''}
+    </div>`;
+  });
+  html+=`<div class="flex gap-8 mt-12">
+    <button class="btn-out" style="flex:1" onclick="clearAdvFilters()">Limpiar</button>
+    <button class="btn" style="flex:1" onclick="closeModal();renderList()">Aplicar</button>
+  </div>`;
+  $("modal-content").innerHTML=html;$("modal").classList.add('show');
+}
+function toggleAdvFilter(dim,val){
+  const arr=libraryFilters[dim];
+  const i=arr.indexOf(val);
+  if(i>=0) arr.splice(i,1); else arr.push(val);
+  openAdvancedFiltersModal(); // re-render del modal
+}
+function clearAdvFilters(){
+  libraryFilters={level:[],difficulty:[],fatigue:[],restrictions:[],zones:[]};
+  openAdvancedFiltersModal();
+  renderList();
+}
 function canEdit(ex){return true;} // todos los coaches autenticados editan todo
+function activeAdvFilterCount(){
+  return libraryFilters.level.length+libraryFilters.difficulty.length+libraryFilters.fatigue.length+libraryFilters.restrictions.length+libraryFilters.zones.length;
+}
+function updateAdvFilterBtn(){
+  const n=activeAdvFilterCount();
+  const btn=$("adv-filter-btn"); const cnt=$("adv-filter-count");
+  if(!btn||!cnt) return;
+  cnt.textContent=n>0?` (${n})`:'';
+  btn.classList.toggle('active',n>0);
+}
 function renderList(){
   const search=normalizeText($("search-input").value);
+  updateAdvFilterBtn();
   let items=allExercises.filter(ex=>{
     if(currentFilter==='compound'&&ex.category!=='compound')return false;
     if(currentFilter==='aislacion'&&ex.category!=='aislacion')return false;
@@ -775,6 +862,19 @@ function renderList(){
     if(search){
       const hay=normalizeText(ex.name+' '+(ex.aliases||[]).join(' '));
       if(!hay.includes(search))return false;
+    }
+    // Filtros avanzados (combinables, AND entre dimensiones, OR dentro)
+    if(libraryFilters.level.length&&!libraryFilters.level.includes(ex.level))return false;
+    if(libraryFilters.difficulty.length&&!libraryFilters.difficulty.includes(ex.technical_difficulty))return false;
+    if(libraryFilters.fatigue.length&&!libraryFilters.fatigue.includes(ex.fatigue))return false;
+    // Restricciones: el coach marca lesiones a EVITAR. Si el ejercicio tiene alguna marcada → se oculta.
+    if(libraryFilters.restrictions.length){
+      const exR=ex.restrictions||[];
+      if(libraryFilters.restrictions.some(r=>exR.includes(r))) return false;
+    }
+    if(libraryFilters.zones.length){
+      const exZones=exerciseZones(ex);
+      if(!libraryFilters.zones.some(z=>exZones.includes(z))) return false;
     }
     return true;
   });
@@ -796,6 +896,10 @@ function openExerciseEditor(id){
       name:editingExercise.name||'',
       aliases:[...(editingExercise.aliases||[])],
       category:editingExercise.category||'compound',
+      level:editingExercise.level||'',
+      technical_difficulty:editingExercise.technical_difficulty||'',
+      fatigue:editingExercise.fatigue||'',
+      restrictions:[...(editingExercise.restrictions||[])],
       movement:editingExercise.movement||'',
       equipment:editingExercise.equipment||'',
       muscleActivation:Object.entries(editingExercise.muscle_activation||{}).map(([m,p])=>({muscle:m,pct:p})),
@@ -807,7 +911,7 @@ function openExerciseEditor(id){
     $("editor-title").textContent='Editar ejercicio';
   } else {
     editingExercise=null;
-    editorState={id:null,name:'',aliases:[],category:'compound',movement:'',equipment:'',muscleActivation:[],similar_ids:[],cues:'',scope:'custom-coach',track_mode:'weight'};
+    editorState={id:null,name:'',aliases:[],category:'compound',level:'',technical_difficulty:'',fatigue:'',restrictions:[],movement:'',equipment:'',muscleActivation:[],similar_ids:[],cues:'',scope:'custom-coach',track_mode:'weight'};
     $("editor-title").textContent='Nuevo ejercicio';
   }
   renderEditor();
@@ -824,6 +928,10 @@ function renderEditor(){
   // Categoría radio + track_mode radio
   document.querySelectorAll('[data-cat]').forEach(b=>b.classList.toggle('active',b.dataset.cat===editorState.category));
   document.querySelectorAll('[data-track]').forEach(b=>b.classList.toggle('active',b.dataset.track===(editorState.track_mode||'weight')));
+  document.querySelectorAll('[data-level]').forEach(b=>b.classList.toggle('active',b.dataset.level===editorState.level));
+  document.querySelectorAll('[data-diff]').forEach(b=>b.classList.toggle('active',b.dataset.diff===editorState.technical_difficulty));
+  document.querySelectorAll('[data-fat]').forEach(b=>b.classList.toggle('active',b.dataset.fat===editorState.fatigue));
+  renderRestrictions();
   applyMovilidadVisibility();
   // Aliases / Similar / Músculos
   renderAliases(true);
@@ -845,6 +953,49 @@ function setEditorCategory(c){
   applyMovilidadVisibility();
   // Re-evaluar el botón save (movilidad permite muscle vacío)
   if(typeof renderMuscleEditor==='function') renderMuscleEditor(true);
+}
+function setEditorLevel(l){
+  editorState.level=editorState.level===l?'':l;
+  document.querySelectorAll('[data-level]').forEach(b=>b.classList.toggle('active',b.dataset.level===editorState.level));
+}
+function setEditorDifficulty(d){
+  editorState.technical_difficulty=editorState.technical_difficulty===d?'':d;
+  document.querySelectorAll('[data-diff]').forEach(b=>b.classList.toggle('active',b.dataset.diff===editorState.technical_difficulty));
+}
+function setEditorFatigue(f){
+  editorState.fatigue=editorState.fatigue===f?'':f;
+  document.querySelectorAll('[data-fat]').forEach(b=>b.classList.toggle('active',b.dataset.fat===editorState.fatigue));
+}
+function renderRestrictions(){
+  const c=$("ed-restrictions"); if(!c) return;
+  const used=new Set(editorState.restrictions||[]);
+  let html='';
+  // Presets + custom (lo que esté en restrictions y no sea preset)
+  const all=[...RESTRICTION_PRESETS];
+  (editorState.restrictions||[]).forEach(r=>{if(!all.includes(r)) all.push(r);});
+  all.forEach(r=>{
+    const label=RESTRICTION_LABELS[r]||r;
+    const active=used.has(r);
+    html+=`<span class="chip${active?'':' chip-add'}" style="cursor:pointer" onclick="toggleRestriction('${r}')">${label}${active?' ✓':''}</span>`;
+  });
+  html+=`<span class="chip chip-add" style="cursor:pointer" onclick="addCustomRestriction()">+ otra</span>`;
+  c.innerHTML=html;
+}
+function toggleRestriction(r){
+  editorState.restrictions=editorState.restrictions||[];
+  const i=editorState.restrictions.indexOf(r);
+  if(i>=0) editorState.restrictions.splice(i,1);
+  else editorState.restrictions.push(r);
+  renderRestrictions();
+}
+function addCustomRestriction(){
+  const v=prompt('Nombre de la restricción (corto, sin espacios):','');
+  if(v===null) return;
+  const slug=slugify(v).replace(/-/g,'_');
+  if(!slug){toast('Nombre inválido','error');return;}
+  editorState.restrictions=editorState.restrictions||[];
+  if(!editorState.restrictions.includes(slug)) editorState.restrictions.push(slug);
+  renderRestrictions();
 }
 function setEditorTrackMode(m){
   editorState.track_mode=m;
@@ -1061,6 +1212,10 @@ async function saveExercise(){
     name:editorState.name.trim(),
     aliases:editorState.aliases,
     category:editorState.category,
+    level:editorState.level||null,
+    technical_difficulty:editorState.technical_difficulty||null,
+    fatigue:editorState.fatigue||null,
+    restrictions:editorState.restrictions||[],
     movement:editorState.movement||null,
     equipment:editorState.equipment.trim()||null,
     muscle_activation,
@@ -1313,7 +1468,7 @@ function relativeTime(dateStr){
   const years=Math.floor(months/12);
   return years===1?'hace 1 año':`hace ${years} años`;
 }
-const PHASE_LABELS={adaptacion:'Adaptación',progresion:'Progresión',descarga:'Descarga',mantenimiento:'Mantenimiento'};
+const PHASE_LABELS={adaptacion:'Adaptación',reacondicionamiento:'Reacondicionamiento',progresion:'Progresión',rendimiento:'Rendimiento'};
 const WEEK_DAYS=[
   {key:'monday',label:'L',name:'Lunes'},{key:'tuesday',label:'M',name:'Martes'},
   {key:'wednesday',label:'X',name:'Miércoles'},{key:'thursday',label:'J',name:'Jueves'},
@@ -1326,11 +1481,20 @@ async function openAthleteDetail(id){
   if(!a){toast('Alumno no encontrado','error');return;}
   currentAthleteId=id;
   $("adet-name").textContent=a.name;
-  // Render info
+  renderAthleteInfoCard(a,null);
+  showPage('pg-athlete-detail');
+  await loadAthleteRoutines(id);
+}
+
+function renderAthleteInfoCard(a,activePhase){
   const lines=[];
   if(a.email) lines.push(`<div class="text-sm">${a.email}</div>`);
   const meta=[a.age?a.age+' años':null,a.level&&capitalize(a.level)].filter(Boolean).join(' · ');
   if(meta) lines.push(`<div class="text-sm text-mt">${meta}</div>`);
+  if(activePhase){
+    const lbl=PHASE_LABELS[activePhase]||activePhase;
+    lines.push(`<div class="text-sm mt-8"><span class="text-mt fw-700">Fase actual:</span> <span class="mono fw-700" style="color:var(--ac)">${lbl}</span></div>`);
+  }
   if(a.primary_goal) lines.push(`<div class="text-sm mt-8"><span class="text-mt fw-700">Objetivo:</span> ${a.primary_goal}</div>`);
   if(a.injuries) lines.push(`<div class="text-sm mt-4"><span class="text-mt fw-700">Lesiones:</span> ${a.injuries}</div>`);
   const loadIds=Object.keys(a.starting_loads||{});
@@ -1340,8 +1504,6 @@ async function openAthleteDetail(id){
   }
   if(a.notes) lines.push(`<div class="text-sm mt-8 text-mt" style="font-style:italic">${a.notes}</div>`);
   $("adet-info").innerHTML=`<div class="card">${lines.join('')||'<div class="text-sm text-mt">Sin datos adicionales</div>'}</div>`;
-  showPage('pg-athlete-detail');
-  await loadAthleteRoutines(id);
 }
 
 function closeAthleteDetail(){currentAthleteId=null;allRoutines=[];showAllArchived=false;navTo('pg-athletes');}
@@ -1360,6 +1522,11 @@ async function loadAthleteRoutines(athleteId){
 function renderRoutinesInDetail(){
   const active=allRoutines.find(r=>r.status==='active');
   const archived=allRoutines.filter(r=>r.status==='archived');
+  // Refrescar el card de info del alumno con la fase actual (derivada de su rutina activa)
+  const lastNonActive=!active?[...allRoutines].sort((a,b)=>new Date(b.created_at)-new Date(a.created_at))[0]:null;
+  const phaseShown=(active&&active.phase)||(lastNonActive&&lastNonActive.phase)||null;
+  const a=allAthletes.find(x=>x.id===currentAthleteId);
+  if(a) renderAthleteInfoCard(a,phaseShown);
   $("adet-active-warning").style.display=active?'block':'none';
   if(active){
     $("adet-active").innerHTML=routineCard(active,true);
