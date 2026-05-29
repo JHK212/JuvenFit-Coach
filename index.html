@@ -1912,7 +1912,7 @@ const BLOCK_TYPES={
 // Formatos metabólicos para grupos de ejercicios (dentro de cualquier bloque)
 const FORMAT_META={
   normal:{label:'Biserie',color:'#eab308',textColor:'#a16207',bg:'rgba(234,179,8,0.06)',icon:'🔗',isMetabolic:false},
-  amrap :{label:'AMRAP', color:'#ea580c',textColor:'#9a3412',bg:'rgba(234,88,12,0.06)', icon:'🔥',isMetabolic:true},
+  amrap :{label:'Intervalos', color:'#ea580c',textColor:'#9a3412',bg:'rgba(234,88,12,0.06)', icon:'🔥',isMetabolic:true},
   emom  :{label:'EMOM',  color:'#2563eb',textColor:'#1d4ed8',bg:'rgba(37,99,235,0.06)', icon:'⏱',isMetabolic:true},
   core  :{label:'Core',  color:'#D7793E',textColor:'#9A4A1F',bg:'rgba(215,121,62,0.06)',icon:'',  isMetabolic:false}
 };
@@ -1928,7 +1928,7 @@ function formatGroupLabel(exs,gid,groupSize){
   const meta=FORMAT_META[fmt]||FORMAT_META.normal;
   if(fmt==='amrap'){
     const w=cfg.workSecs||'?', r=cfg.restSecs!=null?cfg.restSecs:'?', n=cfg.rounds||'?';
-    return `${meta.icon} AMRAP ${w}s/${r}s × ${n} vuelta${n===1?'':'s'}`+(groupSize>1?` · ${groupSize} ej.`:'');
+    return `${meta.icon} Intervalos ${w}s/${r}s × ${n} vuelta${n===1?'':'s'}`+(groupSize>1?` · ${groupSize} ej.`:'');
   }
   if(fmt==='emom') {
     const n=cfg.rounds||'?', it=cfg.interval||60;
@@ -2116,7 +2116,7 @@ function renderBlockHTML(b,bi){
   html+=`<div class="flex gap-8 mt-8" style="flex-wrap:wrap">
     <button class="btn-out" style="flex:1;min-width:120px;font-size:13px;padding:9px" onclick="openExPickerForBlock(${bi})">+ Ejercicio</button>
     <button class="btn-out" style="flex:1;min-width:120px;font-size:13px;padding:9px;color:#a16207;border-color:#eab308" onclick="openCreateGroupModal(${bi})">🔗 Biserie</button>
-    ${showMetabolicBtn?`<button class="btn-out" style="flex:1;min-width:120px;font-size:13px;padding:9px;color:#ea580c;border-color:#ea580c" onclick="openCreateMetabolicModal(${bi})">🔥 AMRAP/EMOM</button>`:''}
+    ${showMetabolicBtn?`<button class="btn-out" style="flex:1;min-width:120px;font-size:13px;padding:9px;color:#ea580c;border-color:#ea580c" onclick="openCreateMetabolicModal(${bi})">🔥 Intervalos/EMOM</button>`:''}
     ${showCoreBtn?`<button class="btn-out" style="flex:1;min-width:120px;font-size:13px;padding:9px;color:#D7793E;border-color:#D7793E" onclick="openCorePresetPicker(${bi})">Core preset</button>`:''}
   </div>`;
   html+=`</div>`;
@@ -2180,15 +2180,15 @@ function confirmCreateGroup(bi){
 function openCreateMetabolicModal(bi){
   window._mbFormat='amrap';
   window._mbSize=1;
-  let html=`<div class="fw-800 mb-4" style="font-size:18px">🔥 Crear AMRAP / EMOM</div>`;
+  let html=`<div class="fw-800 mb-4" style="font-size:18px">🔥 Crear Intervalos / EMOM</div>`;
   html+=`<div class="text-sm text-mt mb-16">Bloque cronometrado — el timer guía al alumno durante el workout. No aporta volumen muscular, sí trabajo metabólico.</div>`;
   html+=`<div class="mb-16">
     <label class="label">Formato</label>
     <div class="radio-group">
-      <button class="radio-btn active" data-mbfmt="amrap" onclick="setMetabolicFmt('amrap')" style="border-color:#ea580c;color:#ea580c">🔥 AMRAP</button>
+      <button class="radio-btn active" data-mbfmt="amrap" onclick="setMetabolicFmt('amrap')" style="border-color:#ea580c;color:#ea580c">🔥 Intervalos</button>
       <button class="radio-btn" data-mbfmt="emom" onclick="setMetabolicFmt('emom')" style="border-color:#2563eb;color:#2563eb">⏱ EMOM</button>
     </div>
-    <div class="text-xs text-mt mt-4" id="mb-help">AMRAP: intervalos de trabajo/descanso. El atleta hace máximas reps en el tiempo de trabajo.</div>
+    <div class="text-xs text-mt mt-4" id="mb-help">Intervalos: trabajo/descanso por rondas. El atleta hace máximas reps en el tiempo de trabajo.</div>
   </div>`;
   // AMRAP block (work / rest / rounds)
   html+=`<div id="mb-amrap-wrap">
@@ -2228,7 +2228,7 @@ function setMetabolicFmt(fmt){
   const help=$("mb-help");
   if(help) help.textContent=(fmt==='emom')
     ?'EMOM: arrancás cada intervalo. Hacés reps fijas y descansás lo que sobra.'
-    :'AMRAP: intervalos de trabajo/descanso. El atleta hace máximas reps en el tiempo de trabajo.';
+    :'Intervalos: trabajo/descanso por rondas. El atleta hace máximas reps en el tiempo de trabajo.';
   updateMetabolicTotalHint();
 }
 function setMetabolicSize(size){
@@ -2624,7 +2624,7 @@ function renderBexRowHTML(ex,bi,ei,gi){
         if(ex.format==='amrap'){
           // AMRAP: trabajo / descanso / vueltas
           html+=`<div style="background:${fm.bg};padding:10px;border-radius:10px;margin-top:8px;border:1px solid ${fm.color}30">
-            <div class="text-xs fw-700 mb-8" style="color:${fm.textColor};letter-spacing:.5px">CONFIG AMRAP</div>
+            <div class="text-xs fw-700 mb-8" style="color:${fm.textColor};letter-spacing:.5px">CONFIG INTERVALOS</div>
             <div class="flex gap-8">
               <div style="flex:1">
                 <div class="text-xs text-mt mb-4">Trabajo</div>
@@ -2666,9 +2666,9 @@ function renderBexRowHTML(ex,bi,ei,gi){
       <div class="xfl" style="align-items:flex-start">
         <span class="xfl-lbl" style="padding-top:6px">Reps</span>
         <div style="flex:1">
-          <input id="reps-${bi}-${ei}" type="text" class="xfl-inp" value="${s(ex.reps)}" placeholder="8-10 / AMRAP / 30 segs" oninput="upEx(${bi},${ei},'reps',this.value)">
+          <input id="reps-${bi}-${ei}" type="text" class="xfl-inp" value="${s(ex.reps)}" placeholder="8-10 / 30 segs" oninput="upEx(${bi},${ei},'reps',this.value)">
           <div class="qchip-row">
-            ${['6-8','8-10','10-12','12-15','15-20','AMRAP','30 segs','45 segs','1 min'].map(v=>`<span class="qchip" onclick="setQuickField('reps-${bi}-${ei}',${bi},${ei},'reps','${v}')">${v}</span>`).join('')}
+            ${['6-8','8-10','10-12','12-15','15-20','30 segs','45 segs','1 min'].map(v=>`<span class="qchip" onclick="setQuickField('reps-${bi}-${ei}',${bi},${ei},'reps','${v}')">${v}</span>`).join('')}
           </div>
         </div>
       </div>
@@ -2752,7 +2752,7 @@ function groupWithNext(bi,ei){
   const cur=exs[ei], nxt=exs[ei+1];
   // No mezclar formatos: AMRAP/EMOM/CORE no se combinan con biseries normales
   if(isMetabolicFormat(cur.format)||isMetabolicFormat(nxt.format)){
-    toast('AMRAP/EMOM no se mezclan con biseries normales','error');
+    toast('Intervalos/EMOM no se mezclan con biseries normales','error');
     return;
   }
   if(cur.format==='core'||nxt.format==='core'){
@@ -3187,7 +3187,7 @@ function drawMuscleChartIn(opts){
     const emomMin =metaBreakdown.filter(x=>x.fmt==='emom') .reduce((s,x)=>s+x.minutes,0);
     const fmt1=v=>(Math.round(v*10)/10).toString().replace(/\.0$/,'');
     const subs=[];
-    if(amrapMin>0) subs.push(`🔥 ${fmt1(amrapMin)}min AMRAP`);
+    if(amrapMin>0) subs.push(`🔥 ${fmt1(amrapMin)}min Intervalos`);
     if(emomMin>0)  subs.push(`⏱ ${fmt1(emomMin)}min EMOM`);
     return `<div class="text-xs text-mt fw-700 mt-20" style="margin-bottom:8px;letter-spacing:.5px">TRABAJO METABÓLICO</div>
       <div style="display:flex;gap:10px;align-items:center;background:rgba(234,88,12,0.06);border:1px solid rgba(234,88,12,0.25);border-radius:10px;padding:10px 12px">
