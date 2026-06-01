@@ -647,6 +647,8 @@ let allExercises=[];
 let currentFilter='all';
 // Filtros avanzados de la biblioteca · combinables, AND entre dimensiones, OR dentro
 let libraryFilters={level:[],difficulty:[],fatigue:[],restrictions:[],zones:[]};
+// Filtro avanzado del picker de armado de días — estado propio, independiente de la biblioteca.
+let pickerFilters={level:[],difficulty:[],fatigue:[],restrictions:[],zones:[]};
 // Restricciones predefinidas (el coach puede agregar custom)
 const RESTRICTION_PRESETS=['lumbar','hombro','rodilla','movilidad_limitada'];
 const RESTRICTION_LABELS={lumbar:'Lumbar',hombro:'Hombro',rodilla:'Rodilla',movilidad_limitada:'Movilidad limitada'};
@@ -700,6 +702,7 @@ async function doLogout(){
   session=null;coachProfile=null;
   // Limpiar state que no debe sobrevivir el cambio de coach
   libraryFilters={level:[],difficulty:[],fatigue:[],restrictions:[],zones:[]};
+  pickerFilters={level:[],difficulty:[],fatigue:[],restrictions:[],zones:[]};
   corePresets=[];
   allRoutines=[];
   currentAthleteId=null;
@@ -808,7 +811,8 @@ async function loadExercises(){
 }
 function setFilter(f){currentFilter=f;document.querySelectorAll('.pill[data-filter]').forEach(p=>p.classList.toggle('active',p.dataset.filter===f));renderList();}
 
-function openAdvancedFiltersModal(){
+function openAdvancedFiltersModal(ctx='library'){
+  const state=ctx==='picker'?pickerFilters:libraryFilters;
   const dims=[
     {key:'level',title:'Nivel',options:[['principiante','Principiante'],['intermedio','Intermedio'],['avanzado','Avanzado']]},
     {key:'difficulty',title:'Dificultad técnica',options:[['baja','Baja'],['media','Media'],['alta','Alta']]},
@@ -822,28 +826,28 @@ function openAdvancedFiltersModal(){
     html+=`<div class="mb-16">
       <label class="label">${d.title}</label>
       <div class="chips">${d.options.map(([v,lbl])=>{
-        const active=libraryFilters[d.key].includes(v);
-        return `<span class="chip${active?'':' chip-add'}" style="cursor:pointer" onclick="toggleAdvFilter('${d.key}','${v}')">${lbl}${active?' ✓':''}</span>`;
+        const active=state[d.key].includes(v);
+        return `<span class="chip${active?'':' chip-add'}" style="cursor:pointer" onclick="toggleAdvFilter('${ctx}','${d.key}','${v}')">${lbl}${active?' ✓':''}</span>`;
       }).join('')}</div>
       ${d.help?`<div class="text-xs text-mt mt-4">${d.help}</div>`:''}
     </div>`;
   });
   html+=`<div class="flex gap-8 mt-12">
-    <button class="btn-out" style="flex:1" onclick="clearAdvFilters()">Limpiar</button>
-    <button class="btn" style="flex:1" onclick="closeModal();renderList()">Aplicar</button>
+    <button class="btn-out" style="flex:1" onclick="clearAdvFilters('${ctx}')">Limpiar</button>
+    <button class="btn" style="flex:1" onclick="closeModal();${ctx==='picker'?'applyExPickerFilter()':'renderList()'}">Aplicar</button>
   </div>`;
   $("modal-content").innerHTML=html;$("modal").classList.add('show');
 }
-function toggleAdvFilter(dim,val){
-  const arr=libraryFilters[dim];
+function toggleAdvFilter(ctx,dim,val){
+  const arr=(ctx==='picker'?pickerFilters:libraryFilters)[dim];
   const i=arr.indexOf(val);
   if(i>=0) arr.splice(i,1); else arr.push(val);
-  openAdvancedFiltersModal(); // re-render del modal
+  openAdvancedFiltersModal(ctx); // re-render del modal
 }
-function clearAdvFilters(){
-  libraryFilters={level:[],difficulty:[],fatigue:[],restrictions:[],zones:[]};
-  openAdvancedFiltersModal();
-  renderList();
+function clearAdvFilters(ctx){
+  const empty={level:[],difficulty:[],fatigue:[],restrictions:[],zones:[]};
+  if(ctx==='picker'){pickerFilters=empty;openAdvancedFiltersModal(ctx);applyExPickerFilter();}
+  else{libraryFilters=empty;openAdvancedFiltersModal(ctx);renderList();}
 }
 function canEdit(ex){return true;} // todos los coaches autenticados editan todo
 function activeAdvFilterCount(){
@@ -1066,20 +1070,28 @@ function exerciseZones(ex){
   return [...zones];
 }
 
-// Filtro combinado del picker de ejercicios: texto + zona muscular
-let _exPickerZone=null; // null = todas
+// Filtro del picker de armado de días: texto + filtro avanzado (5 dimensiones, estado propio).
 function applyExPickerFilter(){
   const q=normalizeText($("expick-search")?.value||'');
+  const f=pickerFilters;
   document.querySelectorAll('.expick-item').forEach(el=>{
-    const okText=!q||(el.dataset.name||'').includes(q);
-    const okZone=!_exPickerZone||(el.dataset.zones||'').split('|').includes(_exPickerZone);
-    el.style.display=(okText&&okZone)?'':'none';
+    const ds=el.dataset;
+    let ok=!q||(ds.name||'').includes(q);
+    if(ok&&f.level.length) ok=f.level.includes(ds.level||'');
+    if(ok&&f.difficulty.length) ok=f.difficulty.includes(ds.diff||'');
+    if(ok&&f.fatigue.length) ok=f.fatigue.includes(ds.fatigue||'');
+    // Restricciones: lesiones a EVITAR → si el ejercicio tiene alguna marcada, se oculta.
+    if(ok&&f.restrictions.length){const exR=(ds.restr||'').split('|').filter(Boolean);if(f.restrictions.some(r=>exR.includes(r))) ok=false;}
+    if(ok&&f.zones.length){const exZ=(ds.zones||'').split('|').filter(Boolean);if(!f.zones.some(z=>exZ.includes(z))) ok=false;}
+    el.style.display=ok?'':'none';
   });
+  updatePickerFilterBtn();
 }
-function setExPickerZone(z){
-  _exPickerZone=(_exPickerZone===z)?null:z;
-  document.querySelectorAll('.zone-chip').forEach(c=>c.classList.toggle('active',c.dataset.zone===_exPickerZone));
-  applyExPickerFilter();
+function updatePickerFilterBtn(){
+  const f=pickerFilters;
+  const n=f.level.length+f.difficulty.length+f.fatigue.length+f.restrictions.length+f.zones.length;
+  const cnt=$("expick-filter-count"); if(cnt) cnt.textContent=n>0?` (${n})`:'';
+  const btn=$("expick-filter-btn"); if(btn) btn.classList.toggle('active',n>0);
 }
 
 // MUSCLE EDITOR
@@ -2974,15 +2986,10 @@ function openExPickerForBlock(bi,fillSlotIdx){
   });
   const headerLabel=isFilling?'Elegí ejercicio para el slot':'Agregar ejercicio';
   const customAction=isFilling?`fillGroupSlotCustom(${bi},${fillSlotIdx})`:`addCustomExerciseToBlock(${bi})`;
-  _exPickerZone=null;
+  pickerFilters={level:[],difficulty:[],fatigue:[],restrictions:[],zones:[]};
   let html=`<div class="fw-800 mb-12" style="font-size:18px">${headerLabel}</div>`;
   html+=`<input id="expick-search" class="search-input" placeholder="🔍 Buscar en biblioteca..." oninput="applyExPickerFilter()" autofocus>`;
-  // Chips por zona muscular
-  html+=`<div class="zone-chips">`;
-  for(const [zName,z] of Object.entries(BODY_ZONES)){
-    html+=`<div class="zone-chip" data-zone="${zName}" style="--zc:${z.color}" onclick="setExPickerZone('${zName}')">${zName}</div>`;
-  }
-  html+=`</div>`;
+  html+=`<div class="mt-8 mb-4"><span class="pill" id="expick-filter-btn" onclick="openAdvancedFiltersModal('picker')" style="border-style:dashed">≡ Filtros<span id="expick-filter-count"></span></span></div>`;
   html+=`<div class="picker-item" style="border-style:dashed;border-color:var(--ac);color:var(--ac)" onclick="${customAction}"><div class="fw-700 text-sm">+ Ejercicio personalizado</div><div class="text-xs text-mt">No entra a la biblioteca · útil para biseries / triseries</div></div>`;
   html+=`<div style="max-height:44dvh;overflow-y:auto;margin-top:12px">`;
   if(sorted.length){
@@ -2990,7 +2997,7 @@ function openExPickerForBlock(bi,fillSlotIdx){
       const muscles=ex.category==='movilidad'?'movilidad':Object.keys(ex.muscle_activation||{}).slice(0,2).map(m=>MUSCLE_LABELS[m]||m).join(' · ');
       const zones=exerciseZones(ex).join('|');
       const onclickFn=isFilling?`fillGroupSlot(${bi},${fillSlotIdx},'${ex.id}')`:`addExerciseToBlock(${bi},'${ex.id}')`;
-      html+=`<div class="picker-item expick-item" data-name="${normalizeText(ex.name+' '+(ex.aliases||[]).join(' '))}" data-zones="${zones}" onclick="${onclickFn}">
+      html+=`<div class="picker-item expick-item" data-name="${normalizeText(ex.name+' '+(ex.aliases||[]).join(' '))}" data-zones="${zones}" data-level="${ex.level||''}" data-diff="${ex.technical_difficulty||''}" data-fatigue="${ex.fatigue||''}" data-restr="${(ex.restrictions||[]).join('|')}" onclick="${onclickFn}">
         <div><div class="fw-700 text-sm">${ex.name}</div><div class="text-xs text-mt">${muscles}</div></div>
       </div>`;
     });
