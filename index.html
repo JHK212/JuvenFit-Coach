@@ -2671,16 +2671,25 @@ function renderBexRowHTML(ex,bi,ei,gi){
             ${['6-8','8-10','10-12','12-15','15-20','30 segs','45 segs','1 min'].map(v=>`<span class="qchip" onclick="setQuickField('reps-${bi}-${ei}',${bi},${ei},'reps','${v}')">${v}</span>`).join('')}
           </div>
         </div>
-      </div>
-      <div class="xfl" style="align-items:flex-start">
-        <span class="xfl-lbl" style="padding-top:6px">Descanso</span>
+      </div>`;
+      // Descanso: en biserie/triserie normal es UN solo tiempo (entre vueltas) compartido por
+      // todos los miembros — el alumno no descansa entre A y B, solo al cerrar la vuelta.
+      const normalGroup=inGroup&&grpFmt==='normal'&&gi.groupSize>1;
+      if(!(normalGroup&&!gi.isFirst)){
+        const restLbl=normalGroup?'Descanso entre vueltas':'Descanso';
+        const restPh=normalGroup?'60 segs / 1 min':'90 segs / 2 min';
+        const restHandler=normalGroup?`upGroupRest(${bi},${ei},this.value)`:`upEx(${bi},${ei},'rest',this.value)`;
+        const chipFn=normalGroup?`setQuickGroupRest('rest-${bi}-${ei}',${bi},${ei},`:`setQuickField('rest-${bi}-${ei}',${bi},${ei},'rest',`;
+        html+=`<div class="xfl" style="align-items:flex-start">
+        <span class="xfl-lbl" style="padding-top:6px">${restLbl}</span>
         <div style="flex:1">
-          <input id="rest-${bi}-${ei}" type="text" class="xfl-inp" value="${s(ex.rest)}" placeholder="90 segs / 2 min" oninput="upEx(${bi},${ei},'rest',this.value)">
+          <input id="rest-${bi}-${ei}" type="text" class="xfl-inp" value="${s(ex.rest)}" placeholder="${restPh}" oninput="${restHandler}">
           <div class="qchip-row">
-            ${['30 segs','45 segs','60 segs','90 segs','2 min','3 min'].map(v=>`<span class="qchip" onclick="setQuickField('rest-${bi}-${ei}',${bi},${ei},'rest','${v}')">${v}</span>`).join('')}
+            ${['30 segs','45 segs','60 segs','90 segs','2 min','3 min'].map(v=>`<span class="qchip" onclick="${chipFn}'${v}')">${v}</span>`).join('')}
           </div>
         </div>
       </div>`;
+      }
     }
     html+=`<div class="xfl">
         <span class="xfl-lbl">Objetivo</span>
@@ -2764,6 +2773,9 @@ function groupWithNext(bi,ei){
   nxt.groupId=gid;
   cur.format=cur.format||'normal';
   nxt.format=nxt.format||'normal';
+  // Biserie comparte un solo descanso (entre vueltas): propagar el del primer miembro.
+  const members=exs.filter(e=>e.groupId===gid);
+  if(members.length){const r=members[0].rest;members.forEach(e=>{e.rest=r;});}
   cleanupSingletonGroups(bi);
   renderDayEditor();
 }
@@ -2860,6 +2872,19 @@ function upGroupConfig(bi,ei,key,val){
   // Re-render para que el header del grupo (badge) y la métrica metabólica reflejen el cambio
   if(_dayChartTimer) clearTimeout(_dayChartTimer);
   _dayChartTimer=setTimeout(()=>{drawDayMuscleChart();renderDayEditor();},250);
+}
+// Descanso compartido de una biserie/triserie normal: un solo tiempo (entre vueltas) para
+// todos los miembros del grupo. Sin re-render (oninput perdería el foco del input).
+function upGroupRest(bi,ei,val){
+  const exs=editingDayState.blocks[bi].exercises;
+  const gid=exs[ei].groupId;
+  if(!gid){upEx(bi,ei,'rest',val);return;}
+  exs.forEach(e=>{if(e.groupId===gid) e.rest=val;});
+}
+function setQuickGroupRest(inputId,bi,ei,val){
+  const inp=$(inputId);
+  if(inp) inp.value=val;
+  upGroupRest(bi,ei,val);
 }
 
 function moveBlock(bi,dir){
