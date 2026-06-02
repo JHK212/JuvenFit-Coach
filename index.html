@@ -2996,7 +2996,7 @@ function renderExPicker(){
   const customAction=isFilling?`fillGroupSlotCustom(${bi},${fillSlotIdx})`:`addCustomExerciseToBlock(${bi})`;
   let html=`<div class="fw-800 mb-12" style="font-size:18px">${headerLabel}</div>`;
   html+=`<input id="expick-search" class="search-input" placeholder="🔍 Buscar en biblioteca..." oninput="applyExPickerFilter()" autofocus>`;
-  html+=`<div class="mt-8 mb-4"><span class="pill" id="expick-filter-btn" onclick="openAdvancedFiltersModal('picker')" style="border-style:dashed">≡ Filtros<span id="expick-filter-count"></span></span></div>`;
+  html+=`<div class="mt-8 mb-12"><span class="pill" id="expick-filter-btn" onclick="openAdvancedFiltersModal('picker')" style="border-style:dashed;display:inline-block">≡ Filtros<span id="expick-filter-count"></span></span></div>`;
   html+=`<div class="picker-item" style="border-style:dashed;border-color:var(--ac);color:var(--ac)" onclick="${customAction}"><div class="fw-700 text-sm">+ Ejercicio personalizado</div><div class="text-xs text-mt">No entra a la biblioteca · útil para biseries / triseries</div></div>`;
   html+=`<div style="max-height:44dvh;overflow-y:auto;margin-top:12px">`;
   if(sorted.length){
