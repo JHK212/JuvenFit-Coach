@@ -25,7 +25,7 @@ UPDATE exercises SET level='intermedio',   technical_difficulty='media', fatigue
 UPDATE exercises SET level='avanzado',      technical_difficulty='alta',  fatigue='alta',  restrictions='{hombro,lumbar,movilidad_limitada,muneca}'::text[] WHERE name='Press militar';
 UPDATE exercises SET level='intermedio',   technical_difficulty='media', fatigue='media', restrictions='{hombro}'::text[]                            WHERE name='Press mancuernas sentado';
 UPDATE exercises SET level='principiante', technical_difficulty='baja',  fatigue='media', restrictions='{hombro,muneca}'::text[]                     WHERE name='Flexiones';
-UPDATE exercises SET level='avanzado',      technical_difficulty='alta',  fatigue='alta',  restrictions='{hombro,muneca}'::text[]                     WHERE name='Fondos';
+UPDATE exercises SET level='avanzado',      technical_difficulty='alta',  fatigue='alta',  restrictions='{hombro,muneca}'::text[]                     WHERE name='Fondos en paralelas';
 UPDATE exercises SET level='intermedio',   technical_difficulty='media', fatigue='media', restrictions='{hombro}'::text[]                            WHERE name='Aperturas en banco plano';
 UPDATE exercises SET level='intermedio',   technical_difficulty='media', fatigue='alta',  restrictions='{lumbar}'::text[]                            WHERE name='Remo con barra';
 UPDATE exercises SET level='principiante', technical_difficulty='baja',  fatigue='media', restrictions='{lumbar}'::text[]                            WHERE name='Remo con mancuerna';
@@ -133,3 +133,27 @@ UPDATE exercises SET category='core' WHERE name IN (
   'Toco Arriba',
   'Escaladores'
 );
+
+-- ════════════════════════════════════════════════════════════════════════
+-- Review de categorías (jun 2026): correcciones aceptadas por Joaco.
+-- ════════════════════════════════════════════════════════════════════════
+UPDATE exercises SET category='aislacion' WHERE name='T I W';                       -- elevaciones de hombro en prono, no core
+UPDATE exercises SET category='compound'  WHERE name='Puente de Gluteo Unilateral'; -- igualar con Puente de Gluteo (compound)
+
+-- ════════════════════════════════════════════════════════════════════════
+-- Fusión de duplicados (jun 2026).
+--   'fondos' (Fondos en paralelas, compound)  ← KEEP  | borrar 'fondos-2' (Fondos)
+--   'sentadilla-con-barra' (tiene equipment)  ← KEEP  | borrar 'sentadilla-barra'
+-- Enriquecer ganador Fondos (idempotente, seguro):
+UPDATE exercises SET aliases='{"Dips","Fondos"}'::text[] WHERE id='fondos';
+--
+-- ⚠️ El resto corré A MANO, en este orden, tras verificar referencias (checks abajo):
+--   1) checks:
+--      SELECT name FROM core_presets WHERE 'fondos-2'=ANY(exercise_ids) OR 'sentadilla-barra'=ANY(exercise_ids);
+--      SELECT id FROM routines t WHERE to_jsonb(t)::text LIKE '%fondos-2%' OR to_jsonb(t)::text LIKE '%sentadilla-barra%';
+--   2) si ambos dan 0 filas, borrar perdedores:
+--      DELETE FROM exercises WHERE id IN ('fondos-2','sentadilla-barra');
+--   3) recién ahí renombrar el ganador (borrar antes evita choque si 'name' fuera único):
+--      UPDATE exercises SET name='Sentadilla con barra',
+--             aliases='{"back squat","sentadilla trasera","Squat","Sentadilla"}'::text[]
+--        WHERE id='sentadilla-con-barra';
