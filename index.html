@@ -355,6 +355,11 @@ textarea.xfl-inp{resize:none;min-height:48px;font-size:14px;}
     <div id="adet-info"></div>
 
     <div class="sec">
+      <div class="sec-title">📊 Actividad del alumno</div>
+      <div id="adet-stats"></div>
+    </div>
+
+    <div class="sec">
       <div class="sec-title">🟢 Rutina activa</div>
       <div id="adet-active"></div>
     </div>
@@ -1466,6 +1471,7 @@ function addStartingLoad(eid){
 
 // ══ ATHLETE DETAIL ══
 function capitalize(s){return s?s.charAt(0).toUpperCase()+s.slice(1):s;}
+function esc(s){return String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
 function formatDateShort(d){
   if(!d) return '—';
   const dt=new Date(d+(d.length<=10?'T00:00:00':''));
@@ -1540,6 +1546,7 @@ async function loadAthleteRoutines(athleteId){
 function renderRoutinesInDetail(){
   const active=allRoutines.find(r=>r.status==='active');
   const archived=allRoutines.filter(r=>r.status==='archived');
+  renderAthleteStats(active);
   // Refrescar el card de info del alumno con la fase actual (derivada de su rutina activa)
   const lastNonActive=!active?[...allRoutines].sort((a,b)=>new Date(b.created_at)-new Date(a.created_at))[0]:null;
   const phaseShown=(active&&active.phase)||(lastNonActive&&lastNonActive.phase)||null;
@@ -1566,6 +1573,112 @@ function renderRoutinesInDetail(){
 }
 
 function toggleShowAllArchived(){showAllArchived=!showAllArchived;renderRoutinesInDetail();}
+
+// ══ ACTIVIDAD DEL ALUMNO (sesiones subidas desde el Tracker vía pairing) ══
+// Las sesiones cuelgan del athlete_id (no de la rutina). La RLS de Supabase ya
+// filtra a los atletas de este coach. Datos del alumno (notas) → esc() siempre.
+let _athleteSessions=[],_sessOpen={},_statsActiveFreq=null;
+function _daysAgo(dstr){const d=new Date(dstr+(String(dstr).length<=10?'T00:00:00':''));return Math.floor((Date.now()-d.getTime())/86400000);}
+function _sessPeak(ex){
+  const sets=(ex.sets||[]).filter(s=>s.rpe!=null);
+  const maxW=Math.max(0,...sets.map(s=>s.w||0));
+  if(maxW>0) return {v:maxW,unit:'kg'};
+  return {v:Math.max(0,...sets.map(s=>s.r||0)),unit:'reps'};
+}
+async function renderAthleteStats(active){
+  const host=$("adet-stats");if(!host)return;
+  _sessOpen={};_statsActiveFreq=(active&&active.frequency_per_week)||null;
+  host.innerHTML='<div class="text-sm text-mt center" style="padding:16px 0">Cargando actividad...</div>';
+  const {data,error}=await sb.from('sessions').select('*').eq('athlete_id',currentAthleteId).order('session_date',{ascending:false});
+  if(error){host.innerHTML=`<div class="text-sm text-dn">Error: ${esc(error.message)}</div>`;return;}
+  _athleteSessions=data||[];
+  paintAthleteStats();
+}
+function paintAthleteStats(){
+  const host=$("adet-stats");if(!host)return;
+  if(!_athleteSessions.length){
+    host.innerHTML='<div class="card"><div class="text-sm text-mt">El alumno todavía no registró sesiones desde la app.</div></div>';
+    return;
+  }
+  host.innerHTML=_attendanceHTML()+_progressHTML()+_sessionListHTML();
+}
+function _attendanceHTML(){
+  const s=_athleteSessions;
+  const last7=s.filter(x=>_daysAgo(x.session_date)<7).length;
+  const last30=s.filter(x=>_daysAgo(x.session_date)<30).length;
+  const freq=_statsActiveFreq;
+  const adh=freq?`${last7} / ${freq}`:`${last7}`;
+  const adhColor=freq?(last7>=freq?'var(--gn)':last7>=freq*0.6?'var(--yw)':'var(--dn)'):'var(--tx)';
+  let html='<div class="card mb-12"><div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;text-align:center">';
+  html+=`<div><div class="mono fw-800" style="font-size:22px;color:${adhColor}">${adh}</div><div class="text-xs text-mt">esta semana${freq?' / prescrito':''}</div></div>`;
+  html+=`<div><div class="mono fw-800" style="font-size:22px">${last30}</div><div class="text-xs text-mt">últ. 30 días</div></div>`;
+  html+=`<div><div class="mono fw-800" style="font-size:22px">${s.length}</div><div class="text-xs text-mt">total</div></div>`;
+  html+=`</div><div class="text-xs text-mt center mt-8">Última sesión: ${formatDateShort(s[0].session_date)}</div></div>`;
+  return html;
+}
+function _sparkline(vals){
+  const w=70,h=24,n=vals.length;
+  if(n<2) return '';
+  const min=Math.min(...vals),max=Math.max(...vals),rng=max-min||1;
+  const pts=vals.map((v,i)=>{const x=(i/(n-1))*(w-2)+1;const y=h-1-((v-min)/rng)*(h-2);return x.toFixed(1)+','+y.toFixed(1);}).join(' ');
+  return `<svg width="${w}" height="${h}" style="flex:none"><polyline points="${pts}" fill="none" stroke="var(--ac)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
+}
+function _progressHTML(){
+  const byEx={};
+  [..._athleteSessions].sort((a,b)=>a.session_date.localeCompare(b.session_date)).forEach(s=>{
+    (s.exercises||[]).forEach(ex=>{
+      const pk=_sessPeak(ex);
+      if(pk.v<=0) return;
+      (byEx[ex.eid]=byEx[ex.eid]||[]).push({v:pk.v,unit:pk.unit});
+    });
+  });
+  const ranked=Object.keys(byEx).map(eid=>({eid,series:byEx[eid]})).filter(o=>o.series.length>=2).sort((a,b)=>b.series.length-a.series.length).slice(0,6);
+  if(!ranked.length) return '';
+  let html='<div class="card mb-12"><div class="text-xs text-mt fw-700 mb-8" style="text-transform:uppercase;letter-spacing:1px">Progreso de cargas</div>';
+  ranked.forEach(o=>{
+    const ex=allExercises.find(e=>e.id===o.eid);
+    const name=ex?ex.name:o.eid;
+    const series=o.series,last=series[series.length-1],best=Math.max(...series.map(p=>p.v)),delta=last.v-series[0].v;
+    const dColor=delta>0?'var(--gn)':delta<0?'var(--dn)':'var(--mt)';
+    const dStr=(delta>0?'+':'')+delta+' '+last.unit;
+    html+='<div style="display:flex;align-items:center;gap:10px;padding:6px 0;border-top:1px solid var(--bd)">';
+    html+=`<div style="flex:1;min-width:0"><div class="text-sm fw-700" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(name)}</div><div class="text-xs text-mt">${last.v} ${last.unit} · récord ${best}</div></div>`;
+    html+=_sparkline(series.map(p=>p.v));
+    html+=`<div class="mono text-xs" style="color:${dColor};min-width:54px;text-align:right">${dStr}</div>`;
+    html+='</div>';
+  });
+  return html+'</div>';
+}
+function _sessionListHTML(){
+  let html='<div class="card"><div class="text-xs text-mt fw-700 mb-8" style="text-transform:uppercase;letter-spacing:1px">Sesiones</div>';
+  _athleteSessions.slice(0,30).forEach(s=>{
+    const exDone=(s.exercises||[]).filter(ex=>(ex.sets||[]).some(st=>st.rpe!=null));
+    const open=_sessOpen[s.id];
+    html+='<div style="border-top:1px solid var(--bd)">';
+    html+=`<div onclick="toggleSessionDetail('${esc(s.id)}')" style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;cursor:pointer">`;
+    html+=`<div><div class="text-sm fw-700">${formatDateShort(s.session_date)}${s.session_time?` · ${esc(s.session_time)}`:''}</div><div class="text-xs text-mt">${exDone.length} ejercicio${exDone.length===1?'':'s'}</div></div>`;
+    html+=`<div class="text-mt">${open?'▲':'▼'}</div></div>`;
+    if(open) html+=_sessionDetailHTML(s);
+    html+='</div>';
+  });
+  if(_athleteSessions.length>30) html+=`<div class="text-xs text-mt center mt-8">Mostrando últimas 30 de ${_athleteSessions.length}</div>`;
+  return html+'</div>';
+}
+function _sessionDetailHTML(s){
+  let html='<div style="padding:4px 0 10px 0">';
+  (s.exercises||[]).forEach(ex=>{
+    const sets=(ex.sets||[]).filter(st=>st.rpe!=null);
+    if(!sets.length) return;
+    const exl=allExercises.find(e=>e.id===ex.eid);
+    const name=exl?exl.name:ex.eid;
+    const setsStr=sets.map(st=>st.w>0?`${st.w}×${st.r}`:`${st.r}`).join(' · ');
+    html+=`<div class="text-xs" style="padding:2px 0"><span class="fw-700">${esc(name)}</span> <span class="text-mt mono">${esc(setsStr)}</span>`;
+    if(ex.note) html+=` <span class="text-mt" style="font-style:italic">— ${esc(ex.note)}</span>`;
+    html+='</div>';
+  });
+  return html+'</div>';
+}
+function toggleSessionDetail(id){_sessOpen[id]=!_sessOpen[id];paintAthleteStats();}
 
 function routineCard(r,isActive){
   const dayCount=(r.days||[]).length;
