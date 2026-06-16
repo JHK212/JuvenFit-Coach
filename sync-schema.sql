@@ -59,19 +59,27 @@ create index if not exists idx_sessions_athlete on sessions(athlete_id, session_
 
 alter table sessions enable row level security;
 
--- El coach lee las sesiones de SUS atletas. Aislamiento entre coaches: la
--- subquery corre por row server-side, no se puede bypassear desde el cliente.
+-- Decision de producto (2026-06-16): roster compartido. CUALQUIER coach
+-- autenticado lee las sesiones de todos los alumnos (sin aislamiento por
+-- coach_id). Escala personal / equipo de confianza. La escritura sigue siendo
+-- solo via push_session (validacion device_secret), no hay insert/update/delete
+-- para authenticated.
 drop policy if exists "sessions_select_coach_own_athletes" on sessions;
-create policy "sessions_select_coach_own_athletes" on sessions
-  for select to authenticated
-  using (
-    exists (
-      select 1 from athletes a
-      where a.id = sessions.athlete_id
-        and a.coach_id = auth.uid()
-    )
-  );
--- Sin policy de insert/update/delete: las sesiones entran solo via push_session.
+drop policy if exists "sessions_select_all_coaches" on sessions;
+create policy "sessions_select_all_coaches" on sessions
+  for select to authenticated using (true);
+
+-- Lectura compartida tambien en athletes y routines: al abrir el detalle de un
+-- alumno el Coach carga su rutina activa (de ahi salen las stats). Sin esto, un
+-- coach no podria abrir el alumno de otro. Solo SELECT; editar/borrar sigue
+-- restringido al coach dueno por sus policies originales.
+drop policy if exists "athletes_select_all_coaches" on athletes;
+create policy "athletes_select_all_coaches" on athletes
+  for select to authenticated using (true);
+
+drop policy if exists "routines_select_all_coaches" on routines;
+create policy "routines_select_all_coaches" on routines
+  for select to authenticated using (true);
 
 -- ============================================================
 -- 3. claim_athlete_device  (pairing inicial)
@@ -110,7 +118,7 @@ begin
     raise exception 'token_invalid' using hint = 'QR token invalido, expirado o no corresponde a ese atleta';
   end if;
 
-  v_hash := encode(digest(p_device_secret, 'sha256'), 'hex');
+  v_hash := encode(extensions.digest(p_device_secret, 'sha256'), 'hex');
 
   insert into athlete_devices (athlete_id, secret_hash, label)
   values (p_athlete_id, v_hash, p_label)
@@ -143,7 +151,7 @@ declare
   v_hash       text;
   v_session_id text;
 begin
-  v_hash := encode(digest(p_device_secret, 'sha256'), 'hex');
+  v_hash := encode(extensions.digest(p_device_secret, 'sha256'), 'hex');
 
   update athlete_devices
   set last_seen = now()
@@ -214,7 +222,7 @@ declare
   v_hash    text;
   v_routine jsonb;
 begin
-  v_hash := encode(digest(p_device_secret, 'sha256'), 'hex');
+  v_hash := encode(extensions.digest(p_device_secret, 'sha256'), 'hex');
 
   update athlete_devices
   set last_seen = now()
@@ -234,6 +242,47 @@ end;
 $$;
 
 grant execute on function get_active_routine(uuid, text) to anon, authenticated;
+
+-- ============================================================
+-- 5b. mark_session_deleted  (tombstone: el alumno borra -> el coach lo ve)
+-- ============================================================
+-- Soft delete: la sesion no se borra, se marca deleted_at. El coach la sigue
+-- viendo (tachada) pero no cuenta para adherencia/progreso. El borrado en el
+-- Tracker es local; esto propaga la marca. Solo sobre sesiones propias.
+
+alter table sessions add column if not exists deleted_at timestamptz;
+
+create or replace function mark_session_deleted(
+  p_athlete_id    uuid,
+  p_device_secret text,
+  p_session_id    text
+)
+returns jsonb
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_hash text;
+begin
+  v_hash := encode(extensions.digest(p_device_secret, 'sha256'), 'hex');
+
+  update athlete_devices
+  set last_seen = now()
+  where athlete_id = p_athlete_id and secret_hash = v_hash;
+  if not found then
+    raise exception 'device_unauthorized';
+  end if;
+
+  update sessions
+  set deleted_at = now()
+  where id = p_session_id and athlete_id = p_athlete_id;
+
+  return jsonb_build_object('ok', true, 'id', p_session_id);
+end;
+$$;
+
+grant execute on function mark_session_deleted(uuid, text, text) to anon, authenticated;
 
 -- ============================================================
 -- 6. Verificacion

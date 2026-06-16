@@ -1603,7 +1603,8 @@ function paintAthleteStats(){
   host.innerHTML=_attendanceHTML()+_progressHTML()+_sessionListHTML();
 }
 function _attendanceHTML(){
-  const s=_athleteSessions;
+  const s=_athleteSessions.filter(x=>!x.deleted_at);
+  if(!s.length) return '<div class="card mb-12"><div class="text-sm text-mt">Sin sesiones válidas (todas eliminadas por el alumno).</div></div>';
   const last7=s.filter(x=>_daysAgo(x.session_date)<7).length;
   const last30=s.filter(x=>_daysAgo(x.session_date)<30).length;
   const freq=_statsActiveFreq;
@@ -1625,7 +1626,7 @@ function _sparkline(vals){
 }
 function _progressHTML(){
   const byEx={};
-  [..._athleteSessions].sort((a,b)=>a.session_date.localeCompare(b.session_date)).forEach(s=>{
+  [..._athleteSessions].filter(s=>!s.deleted_at).sort((a,b)=>a.session_date.localeCompare(b.session_date)).forEach(s=>{
     (s.exercises||[]).forEach(ex=>{
       const pk=_sessPeak(ex);
       if(pk.v<=0) return;
@@ -1654,9 +1655,10 @@ function _sessionListHTML(){
   _athleteSessions.slice(0,30).forEach(s=>{
     const exDone=(s.exercises||[]).filter(ex=>(ex.sets||[]).some(st=>st.rpe!=null));
     const open=_sessOpen[s.id];
+    const del=!!s.deleted_at;
     html+='<div style="border-top:1px solid var(--bd)">';
-    html+=`<div onclick="toggleSessionDetail('${esc(s.id)}')" style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;cursor:pointer">`;
-    html+=`<div><div class="text-sm fw-700">${formatDateShort(s.session_date)}${s.session_time?` · ${esc(s.session_time)}`:''}</div><div class="text-xs text-mt">${exDone.length} ejercicio${exDone.length===1?'':'s'}</div></div>`;
+    html+=`<div onclick="toggleSessionDetail('${esc(s.id)}')" style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;cursor:pointer${del?';opacity:0.55':''}">`;
+    html+=`<div><div class="text-sm fw-700"${del?' style="text-decoration:line-through"':''}>${formatDateShort(s.session_date)}${s.session_time?` · ${esc(s.session_time)}`:''}</div><div class="text-xs text-mt">${del?'<span style="color:var(--dn)">Eliminada por el alumno</span>':`${exDone.length} ejercicio${exDone.length===1?'':'s'}`}</div></div>`;
     html+=`<div class="text-mt">${open?'▲':'▼'}</div></div>`;
     if(open) html+=_sessionDetailHTML(s);
     html+='</div>';
