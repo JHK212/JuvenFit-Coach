@@ -1600,10 +1600,10 @@ function paintAthleteStats(){
     host.innerHTML='<div class="card"><div class="text-sm text-mt">El alumno todavía no registró sesiones desde la app.</div></div>';
     return;
   }
-  host.innerHTML=_attendanceHTML()+_progressHTML()+_sessionListHTML();
+  const active=_athleteSessions.filter(x=>!x.deleted_at);
+  host.innerHTML=_attendanceHTML(active)+_progressHTML(active)+_sessionListHTML();
 }
-function _attendanceHTML(){
-  const s=_athleteSessions.filter(x=>!x.deleted_at);
+function _attendanceHTML(s){
   if(!s.length) return '<div class="card mb-12"><div class="text-sm text-mt">Sin sesiones válidas (todas eliminadas por el alumno).</div></div>';
   const last7=s.filter(x=>_daysAgo(x.session_date)<7).length;
   const last30=s.filter(x=>_daysAgo(x.session_date)<30).length;
@@ -1624,9 +1624,9 @@ function _sparkline(vals){
   const pts=vals.map((v,i)=>{const x=(i/(n-1))*(w-2)+1;const y=h-1-((v-min)/rng)*(h-2);return x.toFixed(1)+','+y.toFixed(1);}).join(' ');
   return `<svg width="${w}" height="${h}" style="flex:none"><polyline points="${pts}" fill="none" stroke="var(--ac)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
 }
-function _progressHTML(){
+function _progressHTML(active){
   const byEx={};
-  [..._athleteSessions].filter(s=>!s.deleted_at).sort((a,b)=>a.session_date.localeCompare(b.session_date)).forEach(s=>{
+  [...active].sort((a,b)=>a.session_date.localeCompare(b.session_date)).forEach(s=>{
     (s.exercises||[]).forEach(ex=>{
       const pk=_sessPeak(ex);
       if(pk.v<=0) return;
