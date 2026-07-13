@@ -2244,14 +2244,27 @@ function parseImportedRoutine(text){
   };
 }
 
+// Zona dominante = la de mayor activación sumada (exerciseZones[0] es orden de carga, no relevancia)
+function dominantZone(ex){
+  if(ex.category==='movilidad') return 'Movilidad';
+  const w={};
+  for(const [m,pct] of Object.entries(ex.muscle_activation||{})){
+    for(const [zName,z] of Object.entries(BODY_ZONES)){
+      if(z.muscles.includes(m)){w[zName]=(w[zName]||0)+(pct||0);break;}
+    }
+  }
+  const best=Object.entries(w).sort((a,b)=>b[1]-a[1])[0];
+  return best?best[0]:'Otros';
+}
+
 function buildChatGptImportPrompt(){
   const zones={};
   allExercises.forEach(ex=>{
-    const zs=exerciseZones(ex);
-    const z=zs.length?zs[0]:'Otros';
+    const z=dominantZone(ex);
     (zones[z]=zones[z]||[]).push(ex.name);
   });
-  const lib=Object.entries(zones).map(([z,names])=>`${z}: ${names.join(', ')}`).join('\n');
+  const ZONE_ORDER=['Movilidad',...Object.keys(BODY_ZONES),'Otros'];
+  const lib=ZONE_ORDER.filter(z=>zones[z]).map(z=>`${z}: ${zones[z].join(', ')}`).join('\n');
   return `Sos un entrenador experto. Quiero que armes una rutina de gimnasio según el pedido del final.
 
 Respondé ÚNICAMENTE con un JSON válido, sin markdown, sin texto antes ni después. Formato exacto:
