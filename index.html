@@ -365,6 +365,7 @@ textarea.xfl-inp{resize:none;min-height:48px;font-size:14px;}
     </div>
 
     <button class="btn mt-12" onclick="openRoutineEditor(null)">+ Crear rutina nueva</button>
+    <button class="btn-out mt-8" onclick="openImportRoutineModal()">📋 Importar desde ChatGPT</button>
     <div id="adet-active-warning" class="text-xs text-mt mt-8 center" style="display:none">⚠ La rutina activa actual se archivará automáticamente</div>
 
     <div class="sec">
@@ -2028,6 +2029,324 @@ function copyToClipboard(text,btn){
   }
 }
 
+// ══ IMPORT DESDE CHATGPT ══
+const TRACK_DEFAULTS={
+  weight:{sets:4,reps:'8-10',rest:'90 segs'},
+  reps:{sets:3,reps:'8-12',rest:'60 segs'},
+  time:{sets:3,reps:'30 segs',rest:'30 segs'}
+};
+const IMPORT_BLOCK_SYNONYMS={
+  movilidad:'movilidad',calentamiento:'movilidad','entrada en calor':'movilidad','warm up':'movilidad',warmup:'movilidad',
+  principal:'principal',fuerza:'principal',
+  complementario:'complementario',accesorio:'complementario',accesorios:'complementario',
+  finisher:'finisher',cierre:'finisher',
+  custom:'custom',personalizado:'custom'
+};
+const IMPORT_GROUP_FORMATS={biserie:'normal',triserie:'normal',circuito:'normal',amrap:'amrap',intervalos:'amrap',emom:'emom'};
+const ROUTINE_PHASES=['adaptacion','reacondicionamiento','progresion','rendimiento'];
+
+function extractJsonPayload(text){
+  const t=(text||'').replace(/```(?:json)?/gi,'');
+  const a=t.indexOf('{'),b=t.lastIndexOf('}');
+  if(a===-1||b<=a) return {err:'No encontré un JSON en el texto pegado.'};
+  try{return {data:JSON.parse(t.slice(a,b+1))};}
+  catch(e){return {err:'JSON inválido: '+e.message};}
+}
+
+function impInt(v){
+  if(v===undefined||v===null||v==='') return null;
+  const n=parseInt(v,10);
+  return isNaN(n)?null:n;
+}
+function impClamp(n,min,max,warnings,label){
+  if(n<min){warnings.push(`${label}: ${n} ajustado a ${min}.`);return min;}
+  if(n>max){warnings.push(`${label}: ${n} ajustado a ${max}.`);return max;}
+  return n;
+}
+
+function buildImportExerciseIndex(){
+  const idx=new Map();
+  allExercises.forEach(ex=>{
+    const k=normalizeText(ex.name);
+    if(!idx.has(k)) idx.set(k,ex);
+    (ex.aliases||[]).forEach(a=>{const ka=normalizeText(a);if(ka&&!idx.has(ka)) idx.set(ka,ex);});
+  });
+  return idx;
+}
+function matchImportExercise(nombre,idx){
+  const q=normalizeText(nombre);
+  if(idx.has(q)) return {ex:idx.get(q),fuzzy:false};
+  if(q.length<4) return null;
+  const cands=new Map();
+  for(const [k,ex] of idx){if(k.includes(q)||q.includes(k)) cands.set(ex.id,ex);}
+  if(cands.size===1) return {ex:cands.values().next().value,fuzzy:true};
+  return null;
+}
+
+function parseImportMetabolicConfig(fmt,raw,path,errors,warnings){
+  const c=(raw&&typeof raw==='object')?raw:{};
+  if(fmt==='amrap'){
+    const work=impInt(c.trabajo_seg),rest=impInt(c.descanso_seg),rounds=impInt(c.vueltas);
+    if(work===null||work<=0){errors.push(`${path}: 'config.trabajo_seg' tiene que ser un número > 0.`);return null;}
+    if(rounds===null||rounds<=0){errors.push(`${path}: 'config.vueltas' tiene que ser un número > 0.`);return null;}
+    let restSecs=rest;
+    if(restSecs===null){restSecs=0;warnings.push(`${path}: sin 'config.descanso_seg' — quedó en 0 (sin descanso).`);}
+    if(restSecs<0){errors.push(`${path}: 'config.descanso_seg' no puede ser negativo.`);return null;}
+    return {
+      workSecs:impClamp(work,5,600,warnings,`${path}: trabajo`),
+      restSecs:impClamp(restSecs,0,600,warnings,`${path}: descanso`),
+      rounds:impClamp(rounds,1,30,warnings,`${path}: vueltas`)
+    };
+  }
+  const rounds=impInt(c.vueltas),interval=impInt(c.intervalo_seg);
+  if(rounds===null||rounds<=0){errors.push(`${path}: 'config.vueltas' tiene que ser un número > 0.`);return null;}
+  if(interval===null||interval<=0){errors.push(`${path}: 'config.intervalo_seg' tiene que ser un número > 0.`);return null;}
+  return {
+    rounds:impClamp(rounds,1,30,warnings,`${path}: vueltas`),
+    interval:impClamp(interval,10,600,warnings,`${path}: intervalo`)
+  };
+}
+
+function buildImportedExercise(raw,path,ctx,opts){
+  const nombre=(raw.nombre||'').toString().trim();
+  const m=matchImportExercise(nombre,ctx.idx);
+  let exerciseId=null,customName=null;
+  if(m){
+    exerciseId=m.ex.id;
+    if(m.fuzzy) ctx.warnings.push(`${path}: «${nombre}» → matcheado como «${m.ex.name}».`);
+  } else {
+    customName=nombre;
+    ctx.unmatched++;
+    ctx.warnings.push(`${path}: «${nombre}» no está en la biblioteca — queda como personalizado.`);
+  }
+  const base={id:uid(),exerciseId,objective:'',notes:(raw.notas||'').toString()};
+  if(customName) base.customName=customName;
+  if(opts.metabolic){
+    return {...base,sets:null,reps:raw.reps!=null?String(raw.reps):'',rest:'',groupId:opts.gid,format:opts.fmt,formatConfig:opts.cfg};
+  }
+  const dft=TRACK_DEFAULTS[(m&&m.ex.track_mode)||'weight'];
+  const rawSets=raw.series!==undefined?raw.series:opts.groupSets;
+  let sets=impInt(rawSets);
+  if(rawSets!==undefined&&rawSets!==null&&sets===null) ctx.warnings.push(`${path}: 'series' inválido («${rawSets}») — se usó el default.`);
+  if(sets===null||sets<=0) sets=exerciseId?dft.sets:null;
+  const reps=(raw.reps!=null&&raw.reps!=='')?String(raw.reps):(exerciseId?dft.reps:'');
+  const secs=impInt(raw.descanso!==undefined?raw.descanso:opts.groupRest);
+  const rest=secs!==null?`${secs} segs`:(exerciseId?dft.rest:'');
+  const ex={...base,sets,reps,rest};
+  if(opts.gid){ex.groupId=opts.gid;ex.format='normal';}
+  return ex;
+}
+
+function parseImportedRoutine(text){
+  const errors=[],warnings=[];
+  const p=extractJsonPayload(text);
+  if(p.err) return {ok:false,errors:[p.err]};
+  const data=p.data;
+  if(!data||typeof data!=='object'||Array.isArray(data)) return {ok:false,errors:['El JSON tiene que ser un objeto con la rutina (no una lista).']};
+  if(!Array.isArray(data.dias)||!data.dias.length) return {ok:false,errors:["Falta 'dias' (lista con al menos un día)."]};
+
+  const ctx={idx:buildImportExerciseIndex(),warnings,unmatched:0,exCount:0};
+
+  let name=(data.nombre||'').toString().trim();
+  if(!name){name='Rutina importada';warnings.push("Sin 'nombre' — quedó como «Rutina importada».");}
+
+  let freq=impInt(data.dias_por_semana);
+  if(freq===null) freq=Math.min(data.dias.length,7);
+  else freq=impClamp(freq,1,7,warnings,"'dias_por_semana'");
+
+  let phase='';
+  if(data.fase){
+    const f=normalizeText(data.fase);
+    if(ROUTINE_PHASES.includes(f)) phase=f;
+    else warnings.push(`Fase «${data.fase}» desconocida — quedó vacía.`);
+  }
+
+  const days=[];
+  data.dias.forEach((dia,di)=>{
+    const dLabel=`Día ${di+1}`;
+    if(!dia||typeof dia!=='object'||Array.isArray(dia)){errors.push(`${dLabel}: no es un objeto.`);return;}
+    if(!Array.isArray(dia.bloques)||!dia.bloques.length){errors.push(`${dLabel}: falta 'bloques' (lista con al menos un bloque).`);return;}
+    const day={id:uid(),name:(dia.nombre||'').toString().trim()||dLabel,blocks:[]};
+    const movedMetabolic=[];
+
+    dia.bloques.forEach((blq,bi)=>{
+      const bPath=`${dLabel}, bloque ${bi+1}`;
+      if(!blq||typeof blq!=='object'||Array.isArray(blq)){errors.push(`${bPath}: no es un objeto.`);return;}
+      const rawTipo=(blq.tipo||'').toString();
+      let type=IMPORT_BLOCK_SYNONYMS[normalizeText(rawTipo)];
+      if(!type){
+        type='custom';
+        warnings.push(rawTipo?`${bPath}: tipo «${rawTipo}» desconocido — quedó como bloque personalizado.`:`${bPath}: sin 'tipo' — quedó como bloque personalizado.`);
+      }
+      const label=type==='custom'?((blq.nombre||'').toString().trim()||rawTipo.trim()||'Personalizado'):'';
+      const block={id:uid(),type,label,exercises:[]};
+
+      if(!Array.isArray(blq.ejercicios)){errors.push(`${bPath}: falta 'ejercicios' (lista).`);return;}
+      if(!blq.ejercicios.length) warnings.push(`${bPath}: bloque vacío.`);
+
+      blq.ejercicios.forEach((item,ei)=>{
+        const path=`${bPath}, ejercicio ${ei+1}`;
+        if(!item||typeof item!=='object'||Array.isArray(item)){errors.push(`${path}: no es un objeto.`);return;}
+
+        if(item.grupo!==undefined){
+          const fmt=IMPORT_GROUP_FORMATS[normalizeText(item.grupo)];
+          if(!fmt){errors.push(`${path}: grupo «${item.grupo}» desconocido (usar biserie, triserie, amrap o emom).`);return;}
+          const members=Array.isArray(item.ejercicios)?item.ejercicios:[];
+          if(!members.length){errors.push(`${path}: el grupo no tiene 'ejercicios'.`);return;}
+          if(members.some(mm=>mm&&mm.grupo!==undefined)){errors.push(`${path}: no se permiten grupos dentro de grupos.`);return;}
+          const missing=members.findIndex(mm=>!mm||!(mm.nombre||'').toString().trim());
+          if(missing>=0){errors.push(`${path}: al miembro ${missing+1} del grupo le falta 'nombre'.`);return;}
+          if(fmt==='normal'&&members.length<2){errors.push(`${path}: una ${normalizeText(item.grupo)} necesita al menos 2 ejercicios.`);return;}
+
+          const gid='g'+uid();
+          let built;
+          if(fmt==='normal'){
+            const groupSets=item.series,groupRest=item.descanso;
+            built=members.map(mm=>buildImportedExercise(mm,path,ctx,{metabolic:false,gid,groupSets,groupRest}));
+          } else {
+            const cfg=parseImportMetabolicConfig(fmt,item.config,path,errors,warnings);
+            if(!cfg) return;
+            if(members.length>4) warnings.push(`${path}: ${members.length} ejercicios en ${fmt.toUpperCase()} (la app usa 1-4).`);
+            built=members.map(mm=>buildImportedExercise(mm,path,ctx,{metabolic:true,gid,fmt,cfg}));
+          }
+          ctx.exCount+=built.length;
+          if(fmt!=='normal'&&type!=='complementario'){
+            warnings.push(`${path}: ${fmt.toUpperCase()} movido al bloque Complementario (solo permitido ahí).`);
+            movedMetabolic.push(built);
+          } else {
+            block.exercises.push(...built);
+          }
+          return;
+        }
+
+        if(!(item.nombre||'').toString().trim()){errors.push(`${path}: falta 'nombre'.`);return;}
+        block.exercises.push(buildImportedExercise(item,path,ctx,{metabolic:false}));
+        ctx.exCount++;
+      });
+
+      day.blocks.push(block);
+    });
+
+    if(movedMetabolic.length){
+      let comp=day.blocks.find(b=>b.type==='complementario');
+      if(!comp){comp={id:uid(),type:'complementario',label:'',exercises:[]};day.blocks.push(comp);}
+      movedMetabolic.forEach(g=>comp.exercises.push(...g));
+    }
+    days.push(day);
+  });
+
+  if(errors.length) return {ok:false,errors};
+  return {
+    ok:true,
+    draft:{name,frequency_per_week:freq,phase,coach_notes:(data.notas_coach||'').toString(),days},
+    warnings,
+    summary:{days:days.length,exercises:ctx.exCount,unmatched:ctx.unmatched}
+  };
+}
+
+function buildChatGptImportPrompt(){
+  const zones={};
+  allExercises.forEach(ex=>{
+    const zs=exerciseZones(ex);
+    const z=zs.length?zs[0]:'Otros';
+    (zones[z]=zones[z]||[]).push(ex.name);
+  });
+  const lib=Object.entries(zones).map(([z,names])=>`${z}: ${names.join(', ')}`).join('\n');
+  return `Sos un entrenador experto. Quiero que armes una rutina de gimnasio según el pedido del final.
+
+Respondé ÚNICAMENTE con un JSON válido, sin markdown, sin texto antes ni después. Formato exacto:
+
+{
+  "nombre": "nombre de la rutina",
+  "dias_por_semana": 3,
+  "fase": "adaptacion | reacondicionamiento | progresion | rendimiento (opcional)",
+  "notas_coach": "notas generales (opcional)",
+  "dias": [
+    {
+      "nombre": "Día 1 — Empuje (opcional)",
+      "bloques": [
+        {
+          "tipo": "movilidad | principal | complementario | finisher",
+          "ejercicios": [
+            {"nombre": "Press banca", "series": 4, "reps": "8-10", "descanso": 90, "notas": "opcional"},
+            {"grupo": "biserie", "series": 3, "descanso": 60, "ejercicios": [
+              {"nombre": "Curl bíceps", "reps": "12"},
+              {"nombre": "Extensión tríceps", "reps": "12"}
+            ]},
+            {"grupo": "amrap", "config": {"trabajo_seg": 30, "descanso_seg": 30, "vueltas": 8}, "ejercicios": [
+              {"nombre": "Burpees"}
+            ]},
+            {"grupo": "emom", "config": {"vueltas": 10, "intervalo_seg": 60}, "ejercicios": [
+              {"nombre": "Remo en máquina", "reps": "12"}
+            ]}
+          ]
+        }
+      ]
+    }
+  ]
+}
+
+REGLAS:
+- Todos los tiempos van en segundos como número ("descanso", "trabajo_seg", "descanso_seg", "intervalo_seg").
+- "dias_por_semana" entre 1 y 7.
+- "biserie" o "triserie" necesita 2 o más ejercicios.
+- Los grupos "amrap" y "emom" van SOLO dentro de bloques con "tipo": "complementario", con 1 a 4 ejercicios.
+- Usá EXACTAMENTE los nombres de ejercicios de la lista de abajo. Solo si ninguno sirve, usá otro nombre descriptivo (quedará como ejercicio personalizado).
+
+EJERCICIOS DISPONIBLES:
+${lib}
+
+PEDIDO:
+[Escribí acá tu pedido: objetivo, cantidad de días, nivel del alumno, equipamiento, limitaciones]`;
+}
+
+let _importParsed=null;
+function openImportRoutineModal(){
+  if(!currentAthleteId){toast('Sin alumno seleccionado','error');return;}
+  _importParsed=null;
+  let html=`<div class="fw-800 mb-4" style="font-size:18px">📋 Importar desde ChatGPT</div>`;
+  html+=`<div class="text-sm text-mt mb-12">1 — Copiá el prompt y pegalo en ChatGPT junto con tu pedido.<br>2 — Pegá acá abajo la respuesta.<br>3 — Importá: la rutina se abre como borrador para revisar antes de guardar.</div>`;
+  html+=`<button class="btn-out mb-12" onclick="copyToClipboard(buildChatGptImportPrompt(),this)">📄 Copiar prompt para ChatGPT</button>`;
+  html+=`<textarea id="imp-json" class="input" rows="10" style="font-family:var(--fm);font-size:12px" placeholder="Pegá acá el JSON que respondió ChatGPT…" oninput="resetImportFeedback()"></textarea>`;
+  html+=`<div id="imp-feedback" class="text-sm mt-8"></div>`;
+  html+=`<button class="btn mt-12" id="imp-btn" onclick="confirmImportRoutine()">Importar</button>`;
+  html+=`<button class="btn-out mt-8" onclick="closeModal()">Cancelar</button>`;
+  $("modal-content").innerHTML=html;$("modal").classList.add('show');
+}
+function resetImportFeedback(){
+  _importParsed=null;
+  const b=$("imp-btn");if(b)b.textContent='Importar';
+  const f=$("imp-feedback");if(f)f.innerHTML='';
+}
+function confirmImportRoutine(){
+  if(_importParsed){applyImportedRoutine(_importParsed);return;}
+  const text=$("imp-json").value;
+  if(!text.trim()){toast('Pegá el JSON primero','error');return;}
+  const res=parseImportedRoutine(text);
+  const fb=$("imp-feedback");
+  if(!res.ok){
+    fb.innerHTML=`<div style="color:var(--dn)">${res.errors.map(e=>`• ${esc(e)}`).join('<br>')}</div>`;
+    return;
+  }
+  if(res.warnings.length){
+    _importParsed=res;
+    const s=res.summary;
+    fb.innerHTML=`<div class="fw-700 mb-4">${s.days} día${s.days===1?'':'s'} · ${s.exercises} ejercicio${s.exercises===1?'':'s'}${s.unmatched?` · ${s.unmatched} sin match`:''}</div>`
+      +`<div style="color:var(--yw)">${res.warnings.map(w=>`• ${esc(w)}`).join('<br>')}</div>`;
+    $("imp-btn").textContent='Importar igual';
+    return;
+  }
+  applyImportedRoutine(res);
+}
+function applyImportedRoutine(res){
+  _importParsed=null;
+  closeModal();
+  openRoutineEditor(null);
+  Object.assign(editingRoutineState,res.draft);
+  renderRoutineEditor();
+  toast('Rutina importada como borrador — revisá y guardá','success');
+}
+
 // ══ BLOCKS / DAY BUILDER (4.5) ══
 const BLOCK_TYPES={
   movilidad:{label:'Movilidad + Core',color:'#78716c'},
@@ -3137,12 +3456,7 @@ function addExerciseToBlock(bi,exId){
   const ei=editingDayState.blocks[bi].exercises.length;
   // Defaults razonables según track_mode del ejercicio de la biblioteca
   const lib=allExercises.find(e=>e.id===exId);
-  const mode=(lib&&lib.track_mode)||'weight';
-  const defaults={
-    weight:{sets:4,reps:'8-10',rest:'90 segs'},
-    reps:{sets:3,reps:'8-12',rest:'60 segs'},
-    time:{sets:3,reps:'30 segs',rest:'30 segs'}
-  }[mode];
+  const defaults=TRACK_DEFAULTS[(lib&&lib.track_mode)||'weight'];
   editingDayState.blocks[bi].exercises.push({id:uid(),exerciseId:exId,sets:defaults.sets,reps:defaults.reps,rest:defaults.rest,objective:'',notes:''});
   closeModal();
   expandedEx={bi,ei};
