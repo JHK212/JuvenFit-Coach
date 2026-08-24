@@ -372,6 +372,16 @@ textarea.xfl-inp{resize:none;min-height:48px;font-size:14px;}
       <div class="sec-title">📦 Histórico</div>
       <div id="adet-archived"></div>
     </div>
+
+    <div class="sec" id="adet-progress-sec" style="display:none">
+      <div class="sec-title">📈 Progreso de cargas</div>
+      <div id="adet-progress"></div>
+    </div>
+
+    <div class="sec" id="adet-sessions-sec" style="display:none">
+      <div class="sec-title">🗓 Sesiones</div>
+      <div id="adet-sessions"></div>
+    </div>
   </div>
 
   <!-- ══ EDITOR DE RUTINA (metadatos) ══ -->
@@ -1590,6 +1600,7 @@ async function renderAthleteStats(active){
   const host=$("adet-stats");if(!host)return;
   _sessOpen={};_statsActiveFreq=(active&&active.frequency_per_week)||null;
   host.innerHTML='<div class="text-sm text-mt center" style="padding:16px 0">Cargando actividad...</div>';
+  $("adet-progress-sec").style.display='none';$("adet-sessions-sec").style.display='none';
   const {data,error}=await sb.from('sessions').select('*').eq('athlete_id',currentAthleteId).order('session_date',{ascending:false});
   if(error){host.innerHTML=`<div class="text-sm text-dn">Error: ${esc(error.message)}</div>`;return;}
   _athleteSessions=data||[];
@@ -1597,12 +1608,19 @@ async function renderAthleteStats(active){
 }
 function paintAthleteStats(){
   const host=$("adet-stats");if(!host)return;
+  const progSec=$("adet-progress-sec"),sessSec=$("adet-sessions-sec");
   if(!_athleteSessions.length){
     host.innerHTML='<div class="card"><div class="text-sm text-mt">El alumno todavía no registró sesiones desde la app.</div></div>';
+    progSec.style.display='none';sessSec.style.display='none';
     return;
   }
   const active=_athleteSessions.filter(x=>!x.deleted_at);
-  host.innerHTML=_attendanceHTML(active)+_progressHTML(active)+_sessionListHTML();
+  host.innerHTML=_attendanceHTML(active);
+  const prog=_progressHTML(active);
+  progSec.style.display=prog?'':'none';
+  $("adet-progress").innerHTML=prog;
+  sessSec.style.display='';
+  $("adet-sessions").innerHTML=_sessionListHTML();
 }
 function _attendanceHTML(s){
   if(!s.length) return '<div class="card mb-12"><div class="text-sm text-mt">Sin sesiones válidas (todas eliminadas por el alumno).</div></div>';
@@ -1636,14 +1654,14 @@ function _progressHTML(active){
   });
   const ranked=Object.keys(byEx).map(eid=>({eid,series:byEx[eid]})).filter(o=>o.series.length>=2).sort((a,b)=>b.series.length-a.series.length).slice(0,6);
   if(!ranked.length) return '';
-  let html='<div class="card mb-12"><div class="text-xs text-mt fw-700 mb-8" style="text-transform:uppercase;letter-spacing:1px">Progreso de cargas</div>';
-  ranked.forEach(o=>{
+  let html='<div class="card">';
+  ranked.forEach((o,i)=>{
     const ex=allExercises.find(e=>e.id===o.eid);
     const name=ex?ex.name:o.eid;
     const series=o.series,last=series[series.length-1],best=Math.max(...series.map(p=>p.v)),delta=last.v-series[0].v;
     const dColor=delta>0?'var(--gn)':delta<0?'var(--dn)':'var(--mt)';
     const dStr=(delta>0?'+':'')+delta+' '+last.unit;
-    html+='<div style="display:flex;align-items:center;gap:10px;padding:6px 0;border-top:1px solid var(--bd)">';
+    html+=`<div style="display:flex;align-items:center;gap:10px;padding:6px 0${i>0?';border-top:1px solid var(--bd)':''}">`;
     html+=`<div style="flex:1;min-width:0"><div class="text-sm fw-700" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(name)}</div><div class="text-xs text-mt">${last.v} ${last.unit} · récord ${best}</div></div>`;
     html+=_sparkline(series.map(p=>p.v));
     html+=`<div class="mono text-xs" style="color:${dColor};min-width:54px;text-align:right">${dStr}</div>`;
@@ -1652,12 +1670,12 @@ function _progressHTML(active){
   return html+'</div>';
 }
 function _sessionListHTML(){
-  let html='<div class="card"><div class="text-xs text-mt fw-700 mb-8" style="text-transform:uppercase;letter-spacing:1px">Sesiones</div>';
-  _athleteSessions.slice(0,30).forEach(s=>{
+  let html='<div class="card">';
+  _athleteSessions.slice(0,30).forEach((s,i)=>{
     const exDone=(s.exercises||[]).filter(ex=>(ex.sets||[]).some(st=>st.rpe!=null));
     const open=_sessOpen[s.id];
     const del=!!s.deleted_at;
-    html+='<div style="border-top:1px solid var(--bd)">';
+    html+=`<div${i>0?' style="border-top:1px solid var(--bd)"':''}>`;
     html+=`<div onclick="toggleSessionDetail('${esc(s.id)}')" style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;cursor:pointer${del?';opacity:0.55':''}">`;
     html+=`<div><div class="text-sm fw-700"${del?' style="text-decoration:line-through"':''}>${formatDateShort(s.session_date)}${s.session_time?` · ${esc(s.session_time)}`:''}</div><div class="text-xs text-mt">${del?'<span style="color:var(--dn)">Eliminada por el alumno</span>':`${exDone.length} ejercicio${exDone.length===1?'':'s'}`}</div></div>`;
     html+=`<div class="text-mt">${open?'▲':'▼'}</div></div>`;
