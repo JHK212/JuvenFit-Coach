@@ -77,7 +77,7 @@ textarea.input{resize:vertical;min-height:70px;font-family:var(--fs);font-size:1
 /* Radios */
 .radio-group{display:flex;gap:8px;}
 .radio-btn{flex:1;padding:12px;border-radius:10px;border:1px solid var(--bd);background:var(--cd);font-size:14px;font-weight:600;cursor:pointer;transition:all .15s;}
-.radio-btn.active{background:var(--ac);color:#fff;border-color:var(--ac);}
+.radio-btn.active{background:var(--ac);color:var(--cd);border-color:var(--ac);}
 
 /* Chips */
 .chips{display:flex;flex-wrap:wrap;gap:6px;}
@@ -93,7 +93,7 @@ textarea.input{resize:vertical;min-height:70px;font-family:var(--fs);font-size:1
 /* Filter pills */
 .pills{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:16px;}
 .pill{padding:6px 12px;background:var(--cd);border:1px solid var(--bd);border-radius:20px;font-size:12px;font-weight:600;cursor:pointer;}
-.pill.active{background:var(--ac);color:#fff;border-color:var(--ac);}
+.pill.active{background:var(--ac);color:var(--cd);border-color:var(--ac);}
 
 /* Exercise card in list */
 .ex-card{background:var(--cd);border:1px solid var(--bd);border-radius:14px;padding:14px 16px;margin-bottom:10px;cursor:pointer;display:flex;align-items:center;gap:12px;transition:border-color .15s;}
@@ -122,7 +122,7 @@ textarea.input{resize:vertical;min-height:70px;font-family:var(--fs);font-size:1
 /* Day pills (L M X J V S D) */
 .day-row{display:flex;gap:6px;}
 .day-pill{flex:1;min-width:32px;padding:11px 4px;background:var(--cd);border:1px solid var(--bd);border-radius:10px;font-size:14px;font-weight:700;cursor:pointer;text-align:center;font-family:var(--fs);}
-.day-pill.active{background:var(--ac);color:#fff;border-color:var(--ac);}
+.day-pill.active{background:var(--ac);color:var(--cd);border-color:var(--ac);}
 
 /* Routine card en detalle */
 .rt-card{background:var(--cd);border:1px solid var(--bd);border-radius:14px;padding:16px;margin-bottom:10px;cursor:pointer;transition:border-color .15s;}
@@ -3053,6 +3053,7 @@ function renderBexRowHTML(ex,bi,ei,gi){
     else if(ex.sets) metaParts.push(`${ex.sets} series`);
     else if(ex.reps) metaParts.push(ex.reps);
     if(ex.rest) metaParts.push(`${ex.rest} des`);
+    if(ex.dropset) metaParts.push(`drop ×${ex.dropset.drops}`);
   }
   const meta=metaParts.join(' · ');
   const exs=exsAll;
@@ -3161,6 +3162,19 @@ function renderBexRowHTML(ex,bi,ei,gi){
           <div class="qchip-row">
             ${['30 segs','45 segs','60 segs','90 segs','2 min','3 min'].map(v=>`<span class="qchip" onclick="${chipFn}'${v}')">${v}</span>`).join('')}
           </div>
+        </div>
+      </div>`;
+      }
+      // Dropset: solo ejercicios sueltos (en biserie/triserie el Tracker no lo aplica).
+      if(!inGroup){
+        const nd=ex.dropset?ex.dropset.drops:0;
+        html+=`<div class="xfl" style="align-items:flex-start">
+        <span class="xfl-lbl" style="padding-top:4px">Dropset</span>
+        <div style="flex:1">
+          <div class="qchip-row" style="margin-top:0">
+            ${[0,1,2,3].map(n=>`<span class="qchip" onclick="setDropset(${bi},${ei},${n})" style="${n===nd?'background:var(--ac);color:var(--cd);border-color:var(--ac)':''}">${n===0?'No':n===1?'1 bajada':n+' bajadas'}</span>`).join('')}
+          </div>
+          ${nd?`<div class="text-xs text-mt" style="margin-top:6px">En la última serie · −${ex.dropset.pct||20}% de peso por bajada, sin descanso</div>`:''}
         </div>
       </div>`;
       }
@@ -3325,6 +3339,11 @@ function upEx(bi,ei,field,val){
   }
 }
 
+function setDropset(bi,ei,n){
+  const ex=editingDayState.blocks[bi].exercises[ei];
+  if(n>0) ex.dropset={drops:n,pct:20}; else delete ex.dropset;
+  renderDayEditor();
+}
 function setQuickField(inputId,bi,ei,field,val){
   const inp=$(inputId);
   if(inp) inp.value=val;
