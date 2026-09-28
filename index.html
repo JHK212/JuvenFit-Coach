@@ -2871,11 +2871,7 @@ function clearPresetSlot(idx,bi){
 }
 
 function openPresetSlotPicker(idx,bi){
-  const sorted=[...allExercises].sort((a,b)=>{
-    const ac=a.category==='core'?0:1, bc=b.category==='core'?0:1;
-    if(ac!==bc) return ac-bc;
-    return a.name.localeCompare(b.name);
-  });
+  const sorted=[...allExercises].sort((a,b)=>a.name.localeCompare(b.name,'es',{sensitivity:'base'}));
   let html=`<div class="fw-800 mb-12" style="font-size:18px">Elegí ejercicio ${idx+1}</div>`;
   html+=`<input id="preset-search" class="search-input" placeholder="🔍 Buscar..." oninput="filterPickerList(this.value,'.preset-pick-item')" autofocus>`;
   html+=`<div style="max-height:55dvh;overflow-y:auto;margin-top:12px">`;
@@ -3445,18 +3441,7 @@ function renderExPicker(){
   // Si fillSlotIdx está definido, el picker llena ese slot (top-down). Si no, pushea nuevo (bottom-up).
   const isFilling=fillSlotIdx!=null;
   const prevSearch=$("expick-search")?.value||'';
-  const blockType=editingDayState&&editingDayState.blocks[bi]?editingDayState.blocks[bi].type:null;
-  const sorted=[...allExercises].sort((a,b)=>{
-    if(blockType==='movilidad'){
-      const prio=ex=>ex.category==='movilidad'?0:(ex.category==='core'?1:2);
-      const ap=prio(a), bp=prio(b);
-      if(ap!==bp) return ap-bp;
-    } else if(blockType==='principal'){
-      const ac=a.category==='compound'?0:1, bc=b.category==='compound'?0:1;
-      if(ac!==bc) return ac-bc;
-    }
-    return a.name.localeCompare(b.name);
-  });
+  const sorted=[...allExercises].sort((a,b)=>a.name.localeCompare(b.name,'es',{sensitivity:'base'}));
   const headerLabel=isFilling?'Elegí ejercicio para el slot':'Agregar ejercicio';
   const customAction=isFilling?`fillGroupSlotCustom(${bi},${fillSlotIdx})`:`addCustomExerciseToBlock(${bi})`;
   let html=`<div class="fw-800 mb-12" style="font-size:18px">${headerLabel}</div>`;
