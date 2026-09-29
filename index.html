@@ -217,6 +217,13 @@ body.modal-open{overflow:hidden;touch-action:none;}
 .xfl-inp{flex:1;background:var(--sf);border:1px solid var(--bd);border-radius:8px;padding:8px 10px;font-size:15px;color:var(--tx);outline:none;font-family:var(--fs);}
 .xfl-inp:focus{border-color:var(--ac);}
 textarea.xfl-inp{resize:none;min-height:48px;font-size:14px;}
+.rv-row{border-top:1px solid var(--bd);padding:10px 0;}
+.rv-src{font-family:var(--fm);font-size:9px;font-weight:700;letter-spacing:1px;padding:2px 6px;border-radius:4px;background:var(--sf);color:var(--mt);}
+.rv-src.ath{background:var(--ac);color:var(--cd);}
+.rv-box{background:var(--sf);border:1px solid var(--bd);border-radius:10px;padding:10px 12px;font-size:12.5px;line-height:1.5;}
+.rv-add{color:var(--gn);}
+.rv-del{color:var(--dn);}
+.rv-chg{color:var(--tx);}
 .qchip{display:inline-block;padding:3px 9px;background:var(--sf);border:1px solid var(--bd);border-radius:14px;font-size:12px;font-weight:600;color:var(--mt);cursor:pointer;font-family:var(--fm);}
 .qchip:hover{border-color:var(--ac);color:var(--ac);}
 .qchip-row{display:flex;flex-wrap:wrap;gap:5px;margin-top:5px;}
@@ -1715,17 +1722,120 @@ function routineCard(r,isActive){
   if(r.coach_notes&&isActive) html+=`<div class="text-xs text-mt mt-8" style="font-style:italic">📝 ${r.coach_notes}</div>`;
   if(!isActive&&r.archived_at) html+=`<div class="text-xs text-mt mt-4">Archivada ${relativeTime(r.archived_at)}</div>`;
   if(!isActive){
-    html+=`<div class="flex gap-8 mt-12"><button class="btn-sm btn-out" style="flex:1" onclick="event.stopPropagation();reactivateRoutine('${r.id}')">♻ Reactivar</button><button class="btn-sm btn-out" style="flex:0 0 auto;color:var(--dn);border-color:rgba(220,38,38,0.3)" onclick="event.stopPropagation();confirmDeleteArchivedRoutine('${r.id}')" title="Eliminar">🗑</button></div>`;
+    html+=`<div class="flex gap-8 mt-12"><button class="btn-sm btn-out" style="flex:1" onclick="event.stopPropagation();reactivateRoutine('${r.id}')">♻ Reactivar</button><button class="btn-sm btn-out" style="flex:0 0 auto" onclick="event.stopPropagation();openRoutineVersions('${r.id}')" title="Versiones">🕘</button><button class="btn-sm btn-out" style="flex:0 0 auto;color:var(--dn);border-color:rgba(220,38,38,0.3)" onclick="event.stopPropagation();confirmDeleteArchivedRoutine('${r.id}')" title="Eliminar">🗑</button></div>`;
   }
   if(isActive){
-    html+=`<div class="mt-12" style="display:grid;grid-template-columns:1fr 1fr 44px;gap:8px;min-width:0">`;
+    html+=`<div class="mt-12" style="display:grid;grid-template-columns:1fr 1fr 44px 44px;gap:8px;min-width:0">`;
     html+=`<button class="btn-sm btn-out" style="min-width:0;padding:8px 6px" onclick="event.stopPropagation();openRoutineEditor('${r.id}')">✎ Editar</button>`;
     html+=`<button class="btn-sm btn-out" style="min-width:0;padding:8px 6px" onclick="event.stopPropagation();showRoutineQR('${r.id}')">📱 QR</button>`;
+    html+=`<button class="btn-sm btn-out" style="padding:8px 0" onclick="event.stopPropagation();openRoutineVersions('${r.id}')" title="Versiones">🕘</button>`;
     html+=`<button class="btn-sm btn-out" style="padding:8px 0" onclick="event.stopPropagation();archiveRoutine('${r.id}')" title="Archivar">📦</button>`;
     html+=`</div>`;
   }
   html+=`</div>`;
   return html;
+}
+
+// ══ VERSIONES DE RUTINA ══
+// Supabase guarda una copia por cada cambio de contenido (tabla routine_versions, trigger en
+// routines). Acá se listan, se comparan y se restauran. Restaurar = un cambio más (versión nueva).
+let _rvList=[],_rvRoutineId=null;
+function rvExName(ex){
+  const lib=ex.exerciseId?allExercises.find(e=>e.id===ex.exerciseId):null;
+  return lib?lib.name:(ex.customName||ex.name||ex.exerciseId||'Ejercicio');
+}
+function rvCounts(days){
+  const d=days||[];
+  const ex=d.reduce((t,x)=>t+(x.blocks||[]).reduce((u,b)=>u+(b.exercises||[]).length,0),0);
+  return `${d.length} día${d.length===1?'':'s'} · ${ex} ej.`;
+}
+function rvFlat(day){
+  const out=[];(day.blocks||[]).forEach(b=>(b.exercises||[]).forEach(e=>out.push(e)));return out;
+}
+// Cambios de oldDays → newDays en líneas legibles.
+function rvDiff(oldDays,newDays){
+  const lines=[];
+  const fmt=v=>v==null||v===''?'—':typeof v==='object'?(v.drops?`drop ×${v.drops}`:JSON.stringify(v)):String(v);
+  const F=[['sets','series'],['reps','reps'],['rest','descanso'],['objective','objetivo'],['notes','notas'],['dropset','dropset']];
+  const od=oldDays||[],nd=newDays||[];
+  const match=(d,list)=>list.find(x=>x.id!=null&&x.id===d.id)||list.find(x=>x.name===d.name);
+  nd.forEach((d,i)=>{
+    const o=match(d,od);
+    const dn=esc(d.name||('Día '+(i+1)));
+    if(!o){lines.push(`<div class="rv-add">+ Día nuevo: <b>${dn}</b> (${rvFlat(d).length} ej.)</div>`);return;}
+    if(o.name!==d.name) lines.push(`<div class="rv-chg">Día renombrado: ${esc(o.name)} → <b>${dn}</b></div>`);
+    const oe=rvFlat(o),ne=rvFlat(d);
+    const key=e=>e.id||(e.exerciseId||e.customName);
+    ne.forEach(e=>{
+      const p=oe.find(x=>key(x)===key(e));
+      if(!p){lines.push(`<div class="rv-add">${dn} · + <b>${esc(rvExName(e))}</b> ${esc([e.sets&&e.reps?e.sets+'×'+e.reps:'',e.rest].filter(Boolean).join(' · '))}</div>`);return;}
+      if((p.exerciseId||'')!==(e.exerciseId||'')||(p.customName||'')!==(e.customName||''))
+        lines.push(`<div class="rv-chg">${dn} · ${esc(rvExName(p))} → <b>${esc(rvExName(e))}</b></div>`);
+      F.forEach(([k,lbl])=>{
+        if(JSON.stringify(p[k]??null)!==JSON.stringify(e[k]??null))
+          lines.push(`<div class="rv-chg">${dn} · ${esc(rvExName(e))}: ${lbl} ${esc(fmt(p[k]))} → <b>${esc(fmt(e[k]))}</b></div>`);
+      });
+    });
+    oe.forEach(p=>{if(!ne.find(x=>key(x)===key(p))) lines.push(`<div class="rv-del">${dn} · − ${esc(rvExName(p))}</div>`);});
+  });
+  od.forEach(o=>{if(!match(o,nd)) lines.push(`<div class="rv-del">− Día eliminado: ${esc(o.name||'')}</div>`);});
+  return lines.length?lines.join(''):'<div class="text-xs text-mt">Sin cambios en ejercicios (puede haber cambiado el nombre, la fase o las notas).</div>';
+}
+async function openRoutineVersions(routineId){
+  _rvRoutineId=routineId;
+  $("modal-content").innerHTML='<div class="text-sm text-mt center" style="padding:24px 0">Cargando versiones...</div>';
+  $("modal").classList.add('show');
+  const {data,error}=await sb.from('routine_versions').select('version,name,days,phase,coach_notes,source,created_at,changed_by').eq('routine_id',routineId).order('version',{ascending:false});
+  if(error){$("modal-content").innerHTML=`<div class="text-sm text-dn">Error: ${esc(error.message)}</div>`;return;}
+  _rvList=data||[];
+  renderRoutineVersions();
+}
+function renderRoutineVersions(openV){
+  const r=allRoutines.find(x=>x.id===_rvRoutineId);
+  const cur=_rvList[0],first=_rvList[_rvList.length-1];
+  let html=`<div class="fw-800 mb-4" style="font-size:18px">Versiones</div><div class="text-sm text-mt mb-12">${esc(r?r.name:'')} · actual v${cur?cur.version:'—'}</div>`;
+  if(_rvList.length>1) html+=`<button class="btn-out btn-sm mb-12" style="width:100%" onclick="renderRoutineVersions('inicio')">Comparar cómo empezó (v${first.version}) con la actual</button>`;
+  if(openV==='inicio') html+=`<div class="rv-box"><div class="text-xs fw-700 mb-8">v${first.version} → v${cur.version}</div>${rvDiff(first.days,cur.days)}</div>`;
+  html+=_rvList.map((v,i)=>{
+    const prev=_rvList[i+1];
+    const who=v.source==='athlete'?'<span class="rv-src ath">ALUMNO</span>':'<span class="rv-src">COACH</span>';
+    const when=new Date(v.created_at).toLocaleString('es-AR',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'});
+    let row=`<div class="rv-row"><div class="row" style="align-items:center;gap:8px"><b>v${v.version}</b>${who}<span class="text-xs text-mt" style="flex:1">${when} · ${rvCounts(v.days)}</span></div><div class="flex gap-8 mt-8">`;
+    if(prev) row+=`<button class="btn-sm btn-out" style="flex:1" onclick="renderRoutineVersions(${v.version})">Ver cambios</button>`;
+    if(i>0) row+=`<button class="btn-sm btn-out" style="flex:1" onclick="restoreRoutineVersion(${v.version})">Restaurar</button>`;
+    row+=`</div>`;
+    if(openV===v.version&&prev) row+=`<div class="rv-box mt-8"><div class="text-xs fw-700 mb-8">v${prev.version} → v${v.version}</div>${rvDiff(prev.days,v.days)}</div>`;
+    return row+`</div>`;
+  }).join('');
+  html+=`<button class="btn-out mt-12" style="width:100%" onclick="closeModal()">Cerrar</button>`;
+  $("modal-content").innerHTML=html;
+}
+async function restoreRoutineVersion(version){
+  const v=_rvList.find(x=>x.version===version);if(!v) return;
+  if(!confirm(`¿Restaurar la v${version}? Se guarda como una versión nueva; no se pierde ninguna.`)) return;
+  const {error}=await sb.from('routines').update({days:v.days,name:v.name,phase:v.phase,coach_notes:v.coach_notes}).eq('id',_rvRoutineId);
+  if(error){toast(error.message,'error');return;}
+  toast(`Restaurada la v${version}`,'success');
+  await loadAthleteRoutines(currentAthleteId);
+  openRoutineVersions(_rvRoutineId);
+}
+// El alumno subió cambios mientras se editaba: no se pisa en silencio.
+function showSaveConflict(payload){
+  window._rvPendingPayload=payload;
+  $("modal-content").innerHTML=`<div class="fw-800 mb-4" style="font-size:18px">El alumno cambió la rutina</div>
+    <div class="text-sm text-mt mb-16">Mientras editabas, el alumno guardó cambios desde su app. Si guardás igual, su versión queda en el historial de Versiones y se puede recuperar.</div>
+    <button class="btn mb-8" style="width:100%" onclick="forceSaveRoutine()">Guardar igual</button>
+    <button class="btn-out" style="width:100%" onclick="closeModal()">Cancelar y revisar</button>`;
+  $("modal").classList.add('show');
+}
+async function forceSaveRoutine(){
+  const payload=window._rvPendingPayload;if(!payload||!editingRoutine) return;
+  const {error}=await sb.from('routines').update(payload).eq('id',editingRoutine.id);
+  closeModal();
+  if(error){toast(error.message,'error');return;}
+  toast('Rutina actualizada','success');
+  await loadAthleteRoutines(currentAthleteId);
+  closeRoutineEditor();
 }
 
 // ══ ROUTINE EDITOR (metadatos · editor de bloques en 4.5) ══
@@ -1830,7 +1940,12 @@ async function saveRoutine(){
   const btn=$("btn-save-rt");btn.disabled=true;btn.innerHTML='<span class="spinner"></span>';
   let res;
   if(editingRoutine){
-    res=await sb.from('routines').update(payload).eq('id',editingRoutine.id);
+    res=await sb.from('routines').update(payload).eq('id',editingRoutine.id).eq('version',editingRoutine.version||1).select('id');
+    if(!res.error&&res.data&&!res.data.length){
+      btn.disabled=false;btn.textContent='Guardar';
+      showSaveConflict(payload);
+      return;
+    }
   } else {
     payload.status='active';
     // Si ya existe rutina activa para este alumno, archivarla primero
