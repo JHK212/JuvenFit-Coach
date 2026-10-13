@@ -737,7 +737,7 @@ async function doLogout(){
   // Re-prellenar el email
   try{const last=localStorage.getItem('coach-last-email');if(last)$("login-email").value=last;}catch{}
 }
-async function loadCoachProfile(){if(!session)return null;const {data,error}=await sb.from('coaches').select('*').eq('id',session.user.id).single();if(error){console.warn('coach profile error:',error.message);return null;}coachProfile=data;return data;}
+async function loadCoachProfile(){if(!session)return null;const {data,error}=await sb.rpc('get_my_coach_profile').single();if(error){console.warn('coach profile error:',error.message);return null;}coachProfile=data;return data;}
 
 // ══ SETTINGS — editar nombre y cambiar password (4.7) ══
 function openEditCoachName(){

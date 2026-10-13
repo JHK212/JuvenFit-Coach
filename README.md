@@ -57,6 +57,7 @@ Suggested order, based on dependencies between the files:
 | 7 | `sync-schema.sql` | Coach-tracker bridge: `athlete_devices` and `sessions` tables, shared-roster read policies, and the `claim_athlete_device`, `push_session`, `get_active_routine` and `mark_session_deleted` functions. Requires `pgcrypto`. |
 | 8 | `auth-accounts-schema.sql` | Athlete accounts: `athletes.user_id`, `free`/`extra` flags on `sessions`, `claim_athlete_account`, `register_device_for_account`, `get_my_sessions`, and restricts shared-roster reads to coaches. Also lists one-time Supabase dashboard steps (email OTP template, SMTP). |
 | 9 | `plaza-flag.sql` | Adds the `plaza` flag to `sessions` (bodyweight substitution mode) and redefines `push_session` and `get_my_sessions` to include it. |
+| 10 | `coaches-privacy.sql` | Restricts API reads of `coaches` to `id` and `name` (column privileges) and adds `get_my_coach_profile()` so each coach reads only their own email/role. Supersedes the public read in `qr-import-schema.sql`. |
 
 `clasificacion-ejercicios.html` is a printable review sheet of the proposed exercise classification; `clasificacion-ejercicios.sql` applies the reviewed values.
 
