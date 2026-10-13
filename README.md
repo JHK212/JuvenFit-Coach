@@ -96,7 +96,8 @@ The app connects to the Supabase project configured at the top of the `<script>`
 ├── qr-import-schema.sql
 ├── sync-schema.sql
 ├── auth-accounts-schema.sql
-└── plaza-flag.sql
+├── plaza-flag.sql
+└── coaches-privacy.sql
 ```
 
 ## Notes
